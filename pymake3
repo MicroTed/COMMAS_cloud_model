@@ -1,0 +1,634 @@
+#!/usr/bin/env python3
+#
+# System imports
+#
+#=======================================================================
+#
+#
+#  Python Makefile-thing for COMMAS
+#
+#
+#=======================================================================
+
+import sys, os
+import platform
+
+RANLIB = "'ranlib'"
+AR     = "'ar -ru'"
+MAKE   = 'make -f ../src/Makefile' # --debug'
+#MAKE   = 'make -f Makefile.tmp' # --debug'
+
+# define less-used options as null
+OPT_BUOY = "''"
+OPT_SLV  = "''"
+OPT_ADV  = "''"
+
+#=======================================================================
+#
+#
+# Function to do the makefile calls
+
+def makeit(current_dir,makefile_dir,target,compile_options,mpisuf):
+
+	print("Change directory to " + makefile_dir)
+
+	if os.path.exists(makefile_dir):
+		os.chdir(makefile_dir)
+	else:
+		print("ERROR!!! ")
+		print("ERROR!!! Build directory does not exist, so will create it: " + makefile_dir)
+		print("ERROR!!! ")
+		os.system('mkdir ' + makefile_dir)
+		os.chdir(makefile_dir)
+
+	print()
+	print("Making " + target)
+
+	MAKE_CMD = MAKE + " " + target + " " + compile_options
+
+	if os.system(MAKE_CMD) != 0:
+		print()
+		print("ERROR!!! ")
+		print("ERROR!!!  Failed to compile " + target)
+		print("ERROR!!! ")
+		print()
+		os.chdir(current_dir)
+		return 0
+
+	print("Finished compiling " + target)
+
+	LINK_CMD = 'ln -s ' + makefile_dir + '/' + target + ' ' + current_dir + '/' + target + mpisuf
+
+	if os.system(LINK_CMD) != 0:
+		print()
+		print("ERROR!!! ")
+		print("ERROR!!!  Failed to link " + target)
+		print("ERROR!!! ")
+		print()
+		os.chdir(current_dir)
+		return 0
+
+	print("Linking " + target + " to main directory")
+
+	print()
+	os.chdir(current_dir)
+
+	return 1
+#
+#
+#=======================================================================
+# main script
+
+# Figure out which machine we are on
+
+machine = platform.machine()  # i386, ppc, etc.
+system  = platform.system()   # Darwin, Linux,
+compiler = "gfortran"
+mpi    = 'no'
+SOURCE = 'src'
+mpisuf = ''
+
+# mpisuf = ''
+if mpi == 'yes':
+	mpisuf = '_mpi'
+	SOURCE = 'srcmpi'
+
+print()
+print("Compiler python script for COMMAS")
+print()
+print("Machine is ", machine)
+print("System is  ", system)
+print()
+
+#
+# Some macro descriptions:
+#
+# MOPT4 -> Compile optimization options for ZIEG microphysics scheme
+# MOPT5 -> Compile optimization options for ICE10 microphysics scheme
+#
+#-----------------------------------------------------------------------
+#
+# Mac Intel ifort Compiler definitions
+
+if machine == 'x86_64' and system == 'Darwin' and mpi != 'yes' and compiler != "g95" and compiler != 'xlf':
+
+	F90        = "'ifort  -fp-model precise'" # -traceback'"
+	F77        = "'ifort -fp-model precise'" # -traceback'"
+	FPP        = "'ifort -fp-model precise'" # -traceback'"
+	NCARGF     = "'ncargf90 -traceback'"
+	FIXED      = "'-extend_source'"
+	FREE       = "'-free'"
+	DFLAGS     = "''"
+	LDFLAGS    = "'-traceback'" # -Wl,-stack_addr,0xF10000000 -Wl,-stack_size,0x64000000'"
+	SMP        = "''" #  "'-openmp'"
+	IPO        = "''" # "'-ipo'"
+	OPT_F90    = "'-O3 -zero -ftz -align all  -fp-model precise -traceback'"        # do not use -O3 on Itanium: it causes problems somewhere
+	OPT_ADV    = "'-O3 -fp-model fast'"
+	OPT_F77    = "'-O2 -zero -ftz -align all -traceback'"
+	SOROPT     = "'-O3 -ftz -align all'"
+	OPT_ADV    = "''"
+	OPT_F90    = "'-O2 -zero  -fp-model precise   -align all -ftz'"
+#	OPT_F90    = "'-O0 -zero  -align all -ftz'"
+#	OPT_F90    = "'-g -O0 -C -fpe0 -zero -align all -ftz -traceback'"
+#	OPT_F90    = "'-g -O0'"
+#	OPT_F77    = "'-O0 -zero -g -C -align all -ftz'"
+#	SOROPT     = "'-O0 -g -CB -ftz -align all'"
+	GRDOPT     = "''"
+	OPT_SLV    = "'-O2'"            # special options for solver
+	OPT_SLV    = "''"            # special options for solver
+	OPT_BUOY   = "'-O1'"
+	OPT_BUOY   = "''"
+	MOPT4      = "'-O1 -mp  -zero -save -ftz -std -gen_interfaces'"
+	MOPT4      = "'-O2  -zero -save'"
+#	MOPT4      = "'-O0 -C  -fpe0 -ftrapuv -g  -save'"
+#	MOPT4      = "'-O0 -C -g -fpe0  -save'"
+#	FPPDEF     = "''"
+	MOPT5      = "'-O1  -zero -save -ftz -std -gen_interfaces'"
+	FPPDEF     = "''"
+	PAR        = "''"
+	LDR        = "'ifort -openmp '" + LDFLAGS
+#	LDR        = "'ifort '" + LDFLAGS
+	AR        = "'libtool -static -o'"
+	LOPT       = "'-i_dynamic -openmp'"
+#	LOPT       = "'-i_dynamic '"
+	CC         = "'cc'"
+#	CFLAGS     = "'-c -O -DLITTLE -DUNDERSCORE'"
+	CFLAGS     = "'-c -m64 -O -DLITTLE -DUNDERSCORE -DV5D64'"
+#	NETCDF_LIB = "'-L/opt/local/netcdf_intel/lib -lnetcdf'"
+#	NETCDF_INC = "'-I/opt/local/netcdf_intel/include'"
+#	NETCDF_LIB = "'-L/usr/local/netcdf64/lib -lnetcdf'"
+#	NETCDF_INC = "'-I/usr/local/netcdf64/include'"
+# uncomment next lines to compile with netCDF4
+	DFLAGS     = "'-DNC4 -DV5D64 -DICE10 -DUSEWRF'" # -DNOELEC'"
+#	NETCDF_LIB = "'-L/opt/local/netcdf4/lib -lnetcdf -L/opt/local/hdf5v18b/lib -lhdf5 -lhdf5_hl'" # -lSystemStubs'"
+#	NETCDF_INC = "'-I/opt/local/netcdf4/include -I/opt/local/hdf5v18b/include'"
+	NETCDF_LIB = "'-L/opt/local/netcdf4m64/lib -lnetcdf -L/opt/local/hdf5m64/lib -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+	NETCDF_INC = "'-I/opt/local/netcdf4m64/include -I/opt/local/hdf5m64/include'"
+#	NETCDF_LIB = "'-L/opt/local/netcdf432ser/lib -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+#	NETCDF_INC = "'-I/opt/local/netcdf432ser/include'"
+	NETCDF_LIB = "'-L/opt/local/netcdf431ser/lib -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+	NETCDF_INC = "'-I/opt/local/netcdf431ser/include'"
+	NETCDF_LIB = "'-L/opt/local/netcdf433rc3ser/lib -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz -L/Users/Shared/SDKs/MacOSX10.9.sdk/usr/lib -L/Users/Shared/SDKs/MacOSX10.9.sdk/usr/lib/system'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+	NETCDF_INC = "'-I/opt/local/netcdf433rc3ser/include'"
+#	NETCDF_LIB = "'-L/opt/local/netcdf41m64/lib -lnetcdf -L/opt/local/hdf5m64/lib -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+#	NETCDF_INC = "'-I/opt/local/netcdf41m64/include -I/opt/local/hdf5m64/include'"
+#	NETCDF_LIB = "'-L/opt/local/netcdf4_64/lib -lnetcdf -L/opt/local/hdf5_64/lib -lhdf5_hl -lhdf5 -lz -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+#	NETCDF_INC = "'-I/opt/local/netcdf4_64/include -I/opt/local/hdf5_64/include'"
+
+	LIB        = "''"
+
+if machine == 'x86_64' and system == 'Darwin' and mpi != 'yes' and compiler == "gfortran":
+
+#   F90        = "'mpif90'"
+#   F77        = "'mpif77'"
+#   FPP        = "'mpif90'"
+#     F90        = "'mpif90 -traceback'"
+#     F77        = "'mpif77 -traceback'"
+#     FPP        = "'mpif90 -traceback'"
+    F90        = "'gfortran'"
+    F77        = "'gfortran'"
+    FPP        = "'gfortran'"
+#   F90        = "'mpif90 -gen-interfaces -warn interfaces -fp-stack-check -g -traceback'"
+#   F77        = "'mpif77 -gen-interfaces -warn interfaces -fp-stack-check -g -traceback'"
+#   FPP        = "'mpif90 -gen-interfaces -warn interfaces -fp-stack-check -g -traceback'"
+    NCARGF     = "'ncargf90'"
+    FIXED      = "'-ffixed-form -ffixed-line-length-256'"
+    FREE       = "'-ffree-form -ffree-line-length-256'"
+    SMP        = "''"
+    IPO        = "''" # "'-ipo'"
+    OPT_F90    = "'-O3 -Wno-error'"        # do not use -O3 on Itanium: it causes problems somewhere
+    OPT_ADV    = "'-O3 -Wno-error'"
+    OPT_F77    = "'-O2 -Wno-error'"
+    OPT_F77    = "'-O2 -Wno-error'"
+#   OPT_F90    = "'-O0 -g -fpe0 -C -ftrapuv -traceback'"
+##  OPT_F90    = "'-O0 -g  -C -fpe0 -traceback'"
+#   OPT_F77    = "'-O0 -g  -C -ftrapuv -fpe0 -traceback'"
+#   OPT_F77    = "'-O0 -g  -fpe0 -ftrapuv -zero -C -align all -ftz'"
+#   OPT_ADV    = "''"
+#   OPT_BUOY   = "'-O0'"
+    OPT_SLV    = "'-O2'"            # special options for solver
+    OPT_SLV    = "''"            # special options for solver
+    GRDOPT     = "''"                                                      # special options for grid_module
+#   MOPT4      = "'-O1  -zero -save -ftz -std -gen_interfaces'"
+#   MOPT4      = "'-O2 -fp-model precise  -zero -save -ftz'"
+    MOPT4      = "'-O2'"
+#   MOPT4      = "'-O0 -C -g -fpe0 -ftrapuv -traceback -fp-model precise   -zero -save -ftz'"
+#   FPPDEF     = "''"
+    MOPT5      = "'-O1'"
+    FPPDEF     = "''"
+    SOROPT     = "'-O3'"
+#   SOROPT     = "'-O0 -g -C -ftz -align all'"
+    PAR        = "''"
+#   AR         = "'sync; libtool -static -o'"
+    LDR        = "'gfortran -fopenmp'"
+    LOPT       = "'-fopenmp'"
+    CC         = "'clang'"
+#   CFLAGS     = "'-c -O -DLITTLE -DUNDERSCORE'"
+    CFLAGS     = "'-c -m64 -O -DLITTLE -DUNDERSCORE -DV5D64'"
+#   DFLAGS     = "'-DMPI'"
+#   NETCDF_LIB = "'-L/opt/local/netcdf_intel/lib -lnetcdf'"
+#   NETCDF_INC = "'-I/opt/local/netcdf_intel/include'"
+# uncomment next lines to compile with netCDF4
+#    DFLAGS     = "'-DNC4 -DMPI -DV5D64 -DBOXMG -DUSEWRF -DUSE_PNETCDF'"
+    DFLAGS     = "'-DNC4 -DV5D64 -DUSEWRF'"
+#   DFLAGS     = "'-DNC4 -DMPI -DV5D64'"
+#   NETCDF_LIB = "'-L/opt/local/netcdf4m64/lib -lnetcdf -L/opt/local/hdf5m64/lib -lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran -lz -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+#   NETCDF_INC = "'-I/opt/local/netcdf4m64/include -I/opt/local/hdf5m64/include'"
+#   NETCDF_LIB = "'-L/opt/local/netcdf4mpich/lib -lnetcdf -L/opt/local/hdf5mpich/lib -lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran -lz -L/Users/mansell/src/boxmg-mpi/lib -lboxmg_bug_sgl -lboxmg-extras_bug_sgl'" # -lSystemStubs'"
+#   NETCDF_LIB = "'-L/opt/local/netcdf4m64openmpi/lib -lnetcdf -L/opt/local/hdf5m64openmpi/lib -lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran -lz -L/Users/mansell/src/boxmg-mpi/lib -lboxmg_bug_sgl -lboxmg-extras_bug_sgl'" # -lSystemStubs'"
+    NETCDF_LIB = "'-L/opt/local/netcdf4m64openmpi/lib -lnetcdf -L/opt/local/hdf5m64openmpi/lib -lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran -lz -L/Users/mansell/src/boxmg-mpi-single/lib -lboxmg_opt_sgl -lboxmg-extras_opt_sgl'" # -lSystemStubs'"
+    NETCDF_INC = "'-I/opt/local/netcdf4m64openmpi/include -I/opt/local/hdf5m64openmpi/include  -I/Users/mansell/src/boxmg-mpi-single/include -I/Users/mansell/src/boxmg-mpi-single/extras/msg/include'"
+#   NETCDF_LIB = "'-L/opt/local/netcdf4m64/lib -lnetcdf -L/opt/local/hdf5m64/lib -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz -L/Users/mansell/src/boxmg-mpi-single/lib -lboxmg_opt_sgl -lboxmg-extras_opt_sgl'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+#   NETCDF_INC = "'-I/opt/local/netcdf4m64/include -I/opt/local/hdf5m64/include -I/Users/mansell/src/boxmg-mpi-single/include -I/Users/mansell/src/boxmg-mpi-single/extras/msg/include'"
+    NETCDF_LIB = "'-L/opt/local/netcdf431/lib -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz -L/Users/mansell/src/boxmg-mpi-single/lib -lboxmg_opt_sgl -lboxmg-extras_opt_sgl'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+    NETCDF_INC = "'-I/opt/local/netcdf431/include -I/Users/mansell/src/boxmg-mpi-single/include -I/Users/mansell/src/boxmg-mpi-single/extras/msg/include'"
+    NETCDF_LIB = "' -L/opt/local/pnetcdf150/lib -lpnetcdf -L/opt/local/netcdftest/lib -lnetcdff -lnetcdf -L/opt/local/netcdf431/lib -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz -L/Users/mansell/src/boxmg-mpi-single/lib -lboxmg_opt_sgl -lboxmg-extras_opt_sgl'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+    NETCDF_INC = "'-I/opt/local/netcdftest/include -I/opt/local/pnetcdf150/include -I/opt/local/netcdf431/include -I/Users/mansell/src/boxmg-mpi-single/include -I/Users/mansell/src/boxmg-mpi-single/extras/msg/include'"
+    NETCDF_LIB = "' -L/opt/local/pnetcdf161/lib -lpnetcdf -L/opt/local/netcdf4331/lib -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz -L/Users/mansell/src/boxmg-mpi-single/lib -lboxmg_opt_sgl -lboxmg-extras_opt_sgl -L/Users/Shared/SDKs/MacOSX10.9.sdk/usr/lib/ -L/Users/Shared/SDKs/MacOSX10.9.sdk/usr/lib/system'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+    NETCDF_INC = "'-I/opt/local/netcdf4331/include -I/opt/local/pnetcdf161/include -I/Users/mansell/src/boxmg-mpi-single/include -I/Users/mansell/src/boxmg-mpi-single/extras/msg/include'"
+    NETCDF_LIB = "' -L/Users/Shared/opt/local/ompi212/pnetcdf190/lib -lpnetcdf -L/Users/Shared/opt/local/ompi212/netcdf460par/lib -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz -L/Users/mansell/src/boxmg-mpi-single/lib -lboxmg_opt_sgl -lboxmg-extras_opt_sgl'" # -L/Users/Shared/SDKs/MacOSX10.9.sdk/usr/lib/ -L/Users/Shared/SDKs/MacOSX10.9.sdk/usr/lib/system'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+    NETCDF_INC = "'-I/Users/Shared/opt/local/ompi212/netcdf460par/include -I/Users/Shared/opt/local/ompi212/pnetcdf190/include -I/Users/mansell/src/boxmg-mpi-single/include -I/Users/mansell/src/boxmg-mpi-single/extras/msg/include'"
+    NETCDF_LIB = "'-L/opt/local/netcdf4m64/lib -lnetcdf -L/opt/libraries/hdf5m64/lib -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+    NETCDF_INC = "'-I/opt/local/netcdf4m64/include -I/opt/libraries/hdf5m64/include'"
+    NETCDF_LIB = "'-L${NETCDF4_DIR}/lib -lnetcdff -L${HDF5_DIR}/lib -lhdf5_hl -lhdf5 -lz'"
+    NETCDF_INC = "'-I${NETCDF4_DIR}/include -I${HDF5_DIR}/include'"
+#   NETCDF_LIB = "' -L/Users/Shared/opt/local/netcdf431par/lib -lpnetcdf -L/Users/Shared/opt/local/netcdf431par/lib -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz -L/Users/mansell/src/boxmg-mpi-single/lib -lboxmg_opt_sgl -lboxmg-extras_opt_sgl -L/Users/Shared/SDKs/MacOSX10.9.sdk/usr/lib/ -L/Users/Shared/SDKs/MacOSX10.9.sdk/usr/lib/system'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+#   NETCDF_INC = "'-I/Users/Shared/opt/local/netcdf431par/include -I/Users/mansell/src/boxmg-mpi-single/include -I/Users/mansell/src/boxmg-mpi-single/extras/msg/include'"
+#   NETCDF_LIB = "' -L/opt/local/netcdf4311/lib -lnetcdff -lnetcdf -lpnetcdf -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz -L/Users/mansell/src/boxmg-mpi-single/lib -lboxmg_opt_sgl -lboxmg-extras_opt_sgl'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+#   NETCDF_INC = "'-I/opt/local/netcdf4311/include -I/Users/mansell/src/boxmg-mpi-single/include -I/Users/mansell/src/boxmg-mpi-single/extras/msg/include'"
+#   NETCDF_LIB = "'-L/opt/local/netcdf4m64/lib -lnetcdf -L/opt/local/hdf5m64/lib -lhdf5_fortran -lhdf5hl_fortran -lhdf5_hl -lhdf5 -lz'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+#   NETCDF_INC = "'-I/opt/local/netcdf4m64/include -I/opt/local/hdf5m64/include'"
+
+
+    LIB        = "''"
+
+if machine == 'arm64' and system == 'Darwin' and mpi != 'yes':
+    F90        = "'gfortran -fallow-argument-mismatch'"
+    F77        = "'gfortran -fallow-argument-mismatch'"
+    FPP        = "'gfortran -fallow-argument-mismatch'"
+#   F90        = "'mpif90 -gen-interfaces -warn interfaces -fp-stack-check -g -traceback'"
+#   F77        = "'mpif77 -gen-interfaces -warn interfaces -fp-stack-check -g -traceback'"
+#   FPP        = "'mpif90 -gen-interfaces -warn interfaces -fp-stack-check -g -traceback'"
+    NCARGF     = "'ncargf90'"
+    FIXED      = "'-ffixed-form -ffixed-line-length-256'"
+    FREE       = "'-ffree-form -ffree-line-length-256'"
+    SMP        = "''"
+    IPO        = "''" # "'-ipo'"
+    OPT_F90    = "'-O3 -Wno-error'" # -Winline'"  
+    OPT_ADV    = "'-O3 -Wno-error'"
+    OPT_F77    = "'-O2 -Wno-error'"
+    OPT_F77    = "'-O2 -Wno-error'"
+#    OPT_F90    = "'-O0 -g -fcheck=all -fbacktrace'"
+#    OPT_F77    = "'-O0 -g -fcheck=all -fbacktrace'"
+#    OPT_F90    = "'-O2 -g -ffpe-trap=invalid,zero,overflow -fcheck=all'"
+#   OPT_F90    = "'-O0 -g -fpe0 -C -ftrapuv -traceback'"
+##  OPT_F90    = "'-O0 -g  -C -fpe0 -traceback'"
+#   OPT_F77    = "'-O0 -g  -C -ftrapuv -fpe0 -traceback'"
+#   OPT_F77    = "'-O0 -g  -fpe0 -ftrapuv -zero -C -align all -ftz'"
+#   OPT_ADV    = "''"
+#   OPT_BUOY   = "'-O0'"
+    OPT_SLV    = "'-O2'"            # special options for solver
+    OPT_SLV    = "''"            # special options for solver
+    GRDOPT     = "''"                                                      # special options for grid_module
+#   MOPT4      = "'-O1  -zero -save -ftz -std -gen_interfaces'"
+#   MOPT4      = "'-O2 -fp-model precise  -zero -save -ftz'"
+    MOPT4      = "'-O2'" # -Winline'"
+#   MOPT4      = "'-O0 -C -g -fpe0 -ftrapuv -traceback -fp-model precise   -zero -save -ftz'"
+#   FPPDEF     = "''"
+    MOPT5      = "'-O2'"
+    FPPDEF     = "''"
+    SOROPT     = "'-O3'"
+#    SOROPT     = "'-O1 -g -ffpe-trap=invalid,zero,overflow -fcheck=all'"
+    PAR        = "''"
+#   AR         = "'sync; libtool -static -o'"
+    LDR        = "'gfortran -fbacktrace'"
+    LOPT       = "'-openmp'"
+    CC         = "'gcc-12'"
+#   CFLAGS     = "'-c -O -DLITTLE -DUNDERSCORE'"
+    CFLAGS     = "'-c -m64 -O -DLITTLE -DUNDERSCORE -DV5D64'"
+#   DFLAGS     = "'-DMPI'"
+#   NETCDF_LIB = "'-L/opt/local/netcdf_intel/lib -lnetcdf'"
+#   NETCDF_INC = "'-I/opt/local/netcdf_intel/include'"
+# uncomment next lines to compile with netCDF4
+    DFLAGS     = "'-DNC4 -DV5D64 -DUSEWRF'"
+#    DFLAGS     = "'-DNC4 -DMPI -DV5D64 -DUSEWRF'"
+#    NETCDF_LIB = "'-L/Users/Shared/opt/local/netcdf480par/lib -lhdf5hl_fortran -lhdf5_fortran -lnetcdff -lnetcdf -lhdf5_hl -lhdf5 -lz -lm'" # -L/opt/local/szip64/lib -lsz'" # -lSystemStubs'"
+#    NETCDF_INC = "'-I/Users/Shared/opt/local/netcdf480par/include'"
+    NETCDF_LIB = "'-L/Users/Shared/opt/local/netcdf480ser/lib -lhdf5hl_fortran -lhdf5_fortran -lnetcdff -lnetcdf -lhdf5_hl -lhdf5 -lz -lm '" 
+    NETCDF_INC = "'-I/Users/Shared/opt/local/netcdf480ser/include'"
+    LIB        = "''"
+
+if machine == 'i386' and system == 'Darwin' and mpi == 'yes' and compiler != "g95" and compiler != 'xlf':
+
+	F90        = "'mpif90'"
+	F77        = "'mpif77'"
+	FPP        = "'mpif90'"
+	NCARGF     = "'ncargf90'"
+	FIXED      = "'-extend_source'"
+	FREE       = "'-free'"
+	SMP        = "''"
+	IPO        = "''" # "'-ipo'"
+	OPT_F90    = "'-O3 -zero -ftz -align all'"        # do not use -O3 on Itanium: it causes problems somewhere
+	OPT_ADV    = "'-O3'"
+	OPT_F77    = "'-O2 -zero -ftz -align all'"
+#	OPT_F90    = "'-O0 -zero -g -CB -align all -ftz'"
+#	OPT_F77    = "'-O0 -zero -g -CB -align all -ftz'"
+#	OPT_ADV    = "'-O0'"
+	GRDOPT     = "''"                                                      # special options for grid_module
+	MOPT4      = "'-O1  -zero -save -ftz -std -gen_interfaces'"
+#	FPPDEF     = "''"
+	MOPT5      = "'-O1  -zero -save -ftz -std -gen_interfaces'"
+	FPPDEF     = "''"
+	SOROPT     = "'-O3 -ftz -align all'"
+	PAR        = "''"
+	LDR        = "'mpif90'"
+	LOPT       = "'-i_dynamic -openmp'"
+	CC         = "'mpicc'"
+#	CFLAGS     = "'-c -O -DLITTLE -DUNDERSCORE'"
+	CFLAGS     = "'-c -m64 -O -DLITTLE -DUNDERSCORE -DV5D64'"
+	DFLAGS     = "'-DMPI'"
+	NETCDF_LIB = "'-L/opt/local/netcdf_intel/lib -lnetcdf'"
+	NETCDF_INC = "'-I/opt/local/netcdf_intel/include'"
+#	NETCDF_LIB = "'-L/opt/local/netcdf4_64/lib -lnetcdf -L/opt/local/hdf5_64/lib -lhdf5_hl -lhdf5 -lz'"
+#	NETCDF_INC = "'-I/opt/local/netcdf4_64/include'"
+# uncomment next lines to compile with netCDF4
+	DFLAGS     = "'-DNC4 -DMPI -DV5D64'"
+	NETCDF_LIB = "'-L/opt/local/netcdf4mpich/lib -lnetcdf -L/opt/local/hdf5mpich/lib -lhdf5 -lhdf5_hl -lz'" # -lSystemStubs'"
+	NETCDF_INC = "'-I/opt/local/netcdf4mpich/include'"
+#	NETCDF_LIB = "'-L/opt/local/netcdf4ompi/lib -lnetcdf -L/opt/local/hdf5ompi/lib -lhdf5 -lhdf5_hl -lz'" # -lSystemStubs'"
+#	NETCDF_INC = "'-I/opt/local/netcdf4mpich/include'"
+
+	LIB        = "''"
+
+if machine == 'ia64' and system == 'Linux':
+
+	F90        = "'ifort'"
+	F77        = "'ifort'"
+	FPP        = "'ifort'"
+	NCARGF     = "'ncargf90'"
+	FIXED      = "'-extend_source'"
+	FREE       = "'-free'"
+#	DFLAGS     = "''"
+#	DFLAGS     = "'-DMPI'"        # MPI to use MPI
+	DFLAGS     = "'-DNC4'"        # NC4 to use netcdf4
+#	DFLAGS     = "'-DNC4 -DMPI'"  # use netcdf4 with MPI
+	SMP        = "'-openmp'"
+	IPO        = "''" # "'-ipo'"
+	OPT_F90    = "'-O2 -zero -ftz -align all'"        # do not use -O3 on Itanium: it causes problems somewhere
+	OPT_ADV    = "'-O3'"
+	OPT_ADV    = "''"
+	OPT_F77    = "'-O2 -zero -ftz -align all'"
+#	OPT_F90    = "'-O0 -zero -g -C -align all -ftz'"
+#	OPT_F77    = "'-O0 -zero -ftz -CB'"
+	OPT_SLV    = "'-override_limits'"            # special options for solver
+	GRDOPT     = "''"                            # special options for grid_module
+#	MOPT5      = "'-O0 -zero -save -ftz'"             # use to avoid long compile if 10ICE will not be used
+	MOPT5      = "'-O1 -zero -save -ftz -override_limits'"
+	MOPT4      = MOPT5
+	FPPDEF     = "''"
+	SOROPT     = "'-O3 -ftz -align all'"
+	PAR        = "''"
+	LDR        = "'ifort -openmp'"
+	LOPT       = "'-i_dynamic -openmp'"
+	CC         = "'cc'"
+	CFLAGS     = "'-c -O -DLITTLE -DUNDERSCORE'"
+	NETCDF_LIB = "'-L/usr/local/netcdf/lib -lnetcdf'"
+	NETCDF_INC = "'-I/usr/local/netcdf/include'"
+# Use the following on origin/gallifrey for netCDF4:
+	NETCDF_LIB = "'-L/raid/mansel2/local/netcdf4_0/lib -lnetcdf -L/raid/mansel2/local/hdf5v181/lib  -lhdf5_hl -lhdf5 -lz'"
+	NETCDF_INC = "'-I/raid/mansel2/local/netcdf4_0/include -I/raid/mansel2/local/hdf5v181/include'"
+	LIB        = "''"
+
+if machine == 'x86_64' and system == 'Linux':
+
+	F90        = "'ifort'"
+	F77        = "'ifort'"
+	FPP        = "'ifort'"
+	NCARGF     = "'ncargf90'"
+	FIXED      = "'-extend_source'"
+	FREE       = "'-free'"
+	FFLAGS     = "'-O2 -ftz'"
+#	FFLAGS     = "'-O0 -g -C'"
+	INCS       = "'-I.'"
+	LDFLAGS    = FFLAGS + "'-ip -Wl,-stack_addr,0xF10000000 -Wl,-stack_size,0x64000000'"
+	DFLAGS    = "'-DNC4'"
+	SMP        = "'-openmp'"
+	IPO        = "''" # "'-ipo'"
+	OPT_F90    = FFLAGS
+	OPT_F77    = FFLAGS
+	OPT_ADV    = "'-O3'"	# FFLAGS
+	GRDOPT     = "''"                            # special options for grid_module
+	MOPT5      = "'-O0 -zero -save -ftz'"        # use to avoid long compile if 10ICE will not be used
+#	MOPT5      = "'-O1 -zero -save -ftz -override_limits'"
+	MOPT4      = MOPT5
+	FPPDEF     = "''"
+	SOROPT     = "'-O0 -ftz -align all'"
+	PAR        = "''"
+	LDR        = "'ifort'"
+	LOPT       = "'-i_dynamic -openmp'"
+	CC         = "'cc'"
+	CFLAGS     = "'-c -O -DLITTLE -DUNDERSCORE'"
+	NETCDF_LIB = "'-L/home/kkuhlman/opt/netcdf4/lib -lnetcdf -L/home/kkuhlman/opt/hdf5/lib -lhdf5_hl -lhdf5 -lz'"
+	NETCDF_INC = "'-I/home/kkuhlman/opt/netcdf4/include'"
+	LIB        = "''"
+
+if compiler == 'xlf' or  machine == 'Power Macintosh' and system == 'Darwin':
+
+	F90        = "'xlf90_r'"
+	F77        = "'xlf_r'" # -qsmp=omp'"
+	FPP        = "'xlf90_r'" # -qflttrap=enable'"
+	NCARGF     = "'ncargf90'"
+	FIXED      = "'-qfixed=132'"
+	FREE       = "'-qsuffix=f=f90 -qsuffix=cpp=F90'"
+	DFLAGS     = "''"
+	DFLAGS     = "'-WF,-DNC4 -WF,-DV5D64'"  # NC4 to use netcdf4
+#	SMP        = "''"
+	SMP        = "'-qsmp=omp'"
+	IPO        = "''" # "'-qipa'"
+	OPT_ADV    = SMP # "''"
+	OPT_F90    = "'-O3 -qhot -qmaxmem=-1'"
+#	OPT_F90    = "'-O0 -g -C -qflttrap=enable:invalid:overflow:zerodivide'"
+	OPT_F77    = "'-O2 -qhot -qsave -qmaxmem=-1 -qinitauto'"
+#	OPT_F77    = "'-O0 -g -C -qinitauto -qsave -qflttrap=enable:invalid:overflow:zerodivide'"
+	GRDOPT     = "''"                            # special options for grid_module
+	MOPT5      = OPT_F77
+	MOPT5      = "'-O2 -C -qsave -qinitauto -qmaxmem=-1'"
+#	MOPT4      = "'-O0 -g -C -qsave -qinitauto'"       # fast compile (runs slowly)
+	MOPT4      = OPT_F77
+	FPPDEF     = "'-WF,'"
+	SOROPT     = "'-O4 -qhot -qsmp=omp'"
+	PAR        = "''"
+	LDR        = "'xlf90_r'" # -qflttrap=enable'"
+	LOPT       = "''"
+	CC         = "'cc'"
+	CFLAGS     = "'-c -O -DV5D64'"
+#	NETCDF_LIB = "'-L/usr/local/netcdf/lib -lnetcdf'"
+#	NETCDF_INC = "'-I/usr/local/netcdf/include'"
+	NETCDF_LIB = "'-L/opt/local/netcdf4/lib -lnetcdf -L/opt/local/hdf5/lib -lhdf5_hl -lhdf5 -lz -lSystemStubs'"
+	NETCDF_INC = "'-I/opt/local/netcdf4/include -I/usr/local/hdf5/include'"
+	LIB        = "''"
+
+#-------------------------------------------------------------------------
+#
+FCOMPILE       = 'F90=' + F90 + ' F77=' + F77 + ' FPP=' + FPP + ' CC=' + CC + ' FIXED=' + FIXED + ' FREE=' + FREE  \
+               + ' OPT_F90=' + OPT_F90 + ' OPT_F77=' + OPT_F77 + ' SMP=' + SMP + ' PAR=' + ' CFLAGS=' + CFLAGS     \
+               + ' GRDOPT=' + GRDOPT + ' MOPT4=' + MOPT4 + ' MOPT5=' + MOPT5 + ' OPT_ADV=' + OPT_ADV               \
+               + ' SOROPT=' + SOROPT + ' OPT_BUOY=' + OPT_BUOY + ' FPPDEF=' + FPPDEF + ' IPO=' + IPO + ' AR=' + AR \
+               + ' OPT_SLV=' + OPT_SLV + ' LDR=' + LDR +  ' LOPT=' + LOPT + ' LIB=' + LIB                          \
+               + ' NETCDF_LIB=' + NETCDF_LIB + ' NETCDF_INC=' + NETCDF_INC                                         \
+               + ' AR=' + AR + ' RANLIB=' + RANLIB + ' NCARGF=' + NCARGF + ' DFLAGS=' + DFLAGS
+
+#--------------------------------------------------------------------------
+# COMPILE DICTIONARY
+#                 name           location    target         compile options
+#--------------------------------------------------------------------------
+#MAKE_DICT      = {'fort_lib':    ['./srcmpi', 'obj',     FCOMPILE], \
+
+MAKE_DICT      = {'commas':      ['./build'+mpisuf, 'commas' ,     FCOMPILE], \
+#                  'commas_init': ['./build'+mpisuf, 'commas_init', FCOMPILE], \
+                  'com2v5d':     ['./build'+mpisuf, 'com2v5d',     FCOMPILE], \
+                  'com2nc4':     ['./build'+mpisuf, 'com2nc4',     FCOMPILE]}
+
+MAKE_DICT_HCM   = {'commashcm':      ['./build'+mpisuf, 'commashcm' ,     FCOMPILE]}
+
+MAKE_DICT_TAK   = {'commastak':      ['./build'+mpisuf, 'commastak' ,     FCOMPILE]}
+
+MAKE_DICT_TAKSPEC = {'comspectra':      ['./build'+mpisuf, 'comspectra' ,     FCOMPILE]}
+
+MAKE_DICT_PLOT   = {'complot':      ['./build'+mpisuf, 'complot' ,     FCOMPILE]}
+
+MAKE_DICT_MAXMIN   = {'maxmin':      ['./build'+mpisuf, 'maxmin' ,     FCOMPILE]}
+
+MAKE_DICT_GRADS  = {'com2grads':      ['./build'+mpisuf, 'com2grads' ,     FCOMPILE]}
+
+MAKE_DICT_TRAJ  = {'comtraj':      ['./build'+mpisuf, 'comtraj' ,     FCOMPILE]}
+
+MAKE_DICT_COMB   = {'combine':      ['./build'+mpisuf, 'combine' ,     FCOMPILE]}
+
+MAKE_DICT_TRMM   = {'comtrmm':      ['./build'+mpisuf, 'comtrmm' ,     FCOMPILE]}
+
+#, \
+#                  'filter':      ['./Filter','enkf',        FCOMPILE]}
+
+current_dir = os.getcwd()
+
+if len(sys.argv) == 1:
+	print()
+	print("No argument! Use 'pymake help' for list of options")
+	print()
+	print("Assuming 'all' - compiling all!")
+	sys.argv.append('all')
+
+if len(sys.argv) > 1:
+
+	print("User argument:  ", sys.argv[1])
+
+	if sys.argv[1] == 'clean':
+		print()
+		print("Cleaning directory")
+
+		targets = list(MAKE_DICT.keys())
+
+		tmp = MAKE_DICT['commas']
+		os.chdir(tmp[0])
+		os.system(MAKE + " clean")
+		os.chdir("..")
+
+		for key in targets:
+			tmp = MAKE_DICT[key]
+			os.system("rm " + tmp[1] + mpisuf)
+#			os.chdir(tmp[0])
+#			os.system(MAKE + " clean")
+#			os.system("cd " + current_dir)
+			print("Cleaned up ", tmp[1])
+
+
+	if sys.argv[1] == 'all':
+		targets = list(MAKE_DICT.keys())
+		for key in targets:
+			tmp = MAKE_DICT[key]
+			os.system("rm " + tmp[1] + mpisuf)
+			ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] == 'commashcm':
+		targets = list(MAKE_DICT_HCM.keys())
+		for key in targets:
+			tmp = MAKE_DICT_HCM[key]
+			os.system("rm " + tmp[1] + mpisuf)
+			ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] == 'commastak':
+		targets = list(MAKE_DICT_TAK.keys())
+		for key in targets:
+			tmp = MAKE_DICT_TAK[key]
+			os.system("rm " + tmp[1] + mpisuf)
+			ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] == 'comspectra':
+		targets = list(MAKE_DICT_TAKSPEC.keys())
+		for key in targets:
+			tmp = MAKE_DICT_TAKSPEC[key]
+			os.system("rm " + tmp[1] + mpisuf)
+			ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] == 'complot':
+		targets = list(MAKE_DICT_PLOT.keys())
+		for key in targets:
+			tmp = MAKE_DICT_PLOT[key]
+			os.system("rm " + tmp[1] + mpisuf)
+			ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] == 'maxmin':
+		targets = list(MAKE_DICT_MAXMIN.keys())
+		for key in targets:
+			tmp = MAKE_DICT_MAXMIN[key]
+			os.system("rm " + tmp[1] + mpisuf)
+			ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] == 'com2grads':
+		targets = list(MAKE_DICT_GRADS.keys())
+		for key in targets:
+			tmp = MAKE_DICT_GRADS[key]
+			os.system("rm " + tmp[1] + mpisuf)
+			ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] == 'comtraj':
+		targets = list(MAKE_DICT_TRAJ.keys())
+		for key in targets:
+			tmp = MAKE_DICT_TRAJ[key]
+			os.system("rm " + tmp[1] + mpisuf)
+			ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] == 'combine':
+		targets = list(MAKE_DICT_COMB.keys())
+		for key in targets:
+			tmp = MAKE_DICT_COMB[key]
+			os.system("rm " + tmp[1] + mpisuf)
+			ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] == 'comtrmm':
+		targets = list(MAKE_DICT_TRMM.keys())
+		for key in targets:
+			tmp = MAKE_DICT_TRMM[key]
+			os.system("rm " + tmp[1] + mpisuf)
+			ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] in MAKE_DICT:
+		tmp = MAKE_DICT[sys.argv[1]]
+		os.system("rm " + tmp[1] + mpisuf)
+		ret = makeit(current_dir,tmp[0],tmp[1],tmp[2],mpisuf)
+
+	if sys.argv[1] == 'help':
+
+		print("==============================================================================================")
+		print("                        Python Compile Script for PyEnCOMMAS ")
+		print()
+		print("     pymake all  --> To create a running version of PyEnCOMMAS: ")
+		print("                      this creates the commas solver library and python interface routines ")
+		print("                      so one can run the scripts. ")
+		print()
+		print("     pymake com2v5d --> To create the COMMAS to Vis5D conversion program")
+		print()
+		print("     pymake clean  --> cleans up the directory, removing object and module files  ")
+		print()
+		print("==============================================================================================")

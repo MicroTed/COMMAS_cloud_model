@@ -1,0 +1,725 @@
+
+
+!================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  3D.RUN
+!==========                                                            ==========
+!==========                                                            ==========
+!================================================================================
+! member   : Only used for ensemble runs.  This number is appended to the run name prefix.
+! start    : -1 to start from time 0, otherwise must be a history time in the netcdf file
+! stop     : time (seconds) of end of simulation
+! ugrid    : grid motion in X direction
+! vgrid    : grid motion in Y direction
+! tprint   : interval (seconds) for max/min print out
+! thistory : interval (seconds) for history dumps
+! tvis5d   : interval (seconds) for vis5d output (program will estimate file size
+!            and will stop if vis5d file will exceed 2GB.  If this happens, increase
+!            tvis5d and/or reduce number of variables in v5dvarlist)
+!
+! restarts: A history/restart dump is made at time = stop, regardless of thistory
+!           Any history time can be used for restarting, and existing 
+!           histories (after the restart time) will be overwritten
+!
+!
+&run
+         member =               0,
+          start =              -1,
+          stop  =            1800,
+          ugrid =             7.0,
+          vgrid =             0.0,
+         tprint =              60,
+       thistory =              60,
+!         tvis5d =             120,  ! default value is  Only for diagnostic in MPI, which creates separate files for each process
+                                     ! Use com2v5d to generate vis5d on the whole domain from the history output.
+/            
+
+
+!================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  ATTRIBUTES
+!==========                                                            ==========
+!==========                                                            ==========
+!================================================================================
+!
+! ne    : number of ensemble members (used by commasinit)
+! year, etc. : obvious
+!
+!Options for 'microphys':
+!    'KESSLER'  : bulk warm-rain Kessler scheme (cloud droplets and rain)
+!    'SCG'      : Zhang et al. Simplified Constrained Gamma bulk warm-rain scheme (cloud droplets and rain)
+!    'LFO'      : bulk 3-ice scheme (Lin et al. 1983)
+!    'WARMLFO'  : liquid-only part of LFO (similar to Kessler, but has explicit rain intercept)
+!    'WARMZIEG' : liquid-only part of two-moment Ziegler 1985 scheme
+!    'ICE10'    : bulk 10-ice scheme (Straka and Mansell, 2005)
+!    'ICE10E'   : As for ICE10 with electrification variables added
+!    'ICE10DM'  : 2-moment 10-ice (under development, can use ipconc=1,2, or 3)
+!    'ICE10DME' : As for ICE10DM with electrification variables added
+!    'ZIEG'     : 2-moment 3-ice Ziegler 1985 scheme 
+!    'ZVD'      : 2-moment 3-ice Ziegler 1985 scheme with variable graupel density.
+!    'ZVDE'     : As ZVD with electrification variables added.
+! netcdfversion : If compiled with netCDF 4, this chooses version 3 or 4 output (ignored when compiled with netcdf3)
+! historyoutput :  0=netcdf for each MPI tile; 
+                   1=single netcdf (default), 
+                   2=fortran binary
+                   3=a single file for each history time
+! historyinput  : default value is -1, which causes it to be set the same as history output
+!                 otherwise 0=netcdf for each MPI tile; 1=single netcdf, 2=fortran binary
+! parallelio    : logical, whether to use round-robin access (.false., default) or use netcdf4/hdf5 parallel io (.true.)
+! parallelio_type : 1 = netcdf/hdf5; 2 = pnetcdf; If using netcdf 4.7.4 or later, then type=1 allows compression (also set deflate_level > 0)
+! deflate_level : 2 (range of 0-10); 
+! v5dstridex    : number of horizontal gridpoints to average over to reduce size of vis5d file
+! v5dstridez    : number of vertical gridpoints to average over to reduce size of vis5d file
+! v5dvarlist   : variables for output into vis5d (for ALL schemes).  
+!              :  See sam2v5d.titles.f for full list of variables and check vis5d_module.f90 code
+!              :  for variables that can actually be used.
+
+&attributes
+         prefix =        '${RUN}',
+      rstprefix =      '${RERUN}',
+             ne =               1,
+           year =            2007,
+          month =               1,
+            day =              20,
+           hour =              00,
+         minute =               0,
+         second =               0,
+      microphys =           'LFO',
+      netcdfversion =           4,
+      historyoutput =           1,
+      parallelio =           .false.,
+      v5dstridex =              1,
+      v5dstridez =              1,
+      v5dvarlist = 'THETA', 'THETAP', 'T', 'TD', 'TKE', 'U', 'V', 'W', 'DBZ',   ! STANDARD FIELDS
+                   'QV','QC', 'QR',                                                  ! WARM RAIN
+                  'QITOT', 'QS','QH',                                          ! 3-ice categories
+!                 'CCW', 'CRW', 'CHW','CWRAD', 'RWRAD','HWDIA',                ! two-moment stuff
+!                 'SCNET','EZ','POT','FLSHI','FLSHP','FLSHN',               ! Elec categories
+!                 'CGHIS',
+/            
+
+!================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  GRID
+!==========                                                            ==========
+!==========                                                            ==========
+!================================================================================
+!   nsmall : number of small steps for acoustic wave integration,
+!            nsmall should be divisible by 6 for the 1/3 and 2/3 RK time steps
+!            but you can get away with some other values.
+!
+! nx,ny,nz : number of momentum points in X, Y, and Z directions 
+!          : scalar variable dimensions are nx-1, ny-1, nz-1
+!          : As of version 7_1, can have nx = nxt*nxprocs + 1
+! xdomain  : dx = xdomain/(nx - 1)
+! ydomain  : dy = ydomain/(ny - 1)
+! zdomain  : height of model top, average dz = zdomain/(nz - 1)
+!
+! dz_stretch : height of lowest model layer; set to -1 for no vertical stretching
+! dzmax    : max dz (default is 700m if not set)
+!   A second upper-level stretch can also be set. (see dzmax2 in initsubs.F90 code)
+!
+! nbndlyr    : number of (unstretched) levels from bottom with thickness of dz_stretch
+!
+&gridn
+             nx =              61, 
+             ny =              61, 
+             nz =              41, 
+             dt =               6, 
+         nsmall =               6, 
+        xdomain =         60000.0, 
+        ydomain =         60000.0, 
+        zdomain =         18000.0, 
+       n_middle =             101, 
+        nbndlyr =               0, 
+     dx_stretch =            -1.0, 
+     dy_stretch =            -1.0, 
+     dz_stretch =           200.0, 
+          dzmax =           700.0,
+       x_sw_loc =             0.0, 
+       y_sw_loc =             0.0, 
+            lat =           35.48, 
+            lon =          -95.54, 
+            hgt =             0.0, 
+/
+
+================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  MPI_PARAMS
+!==========                                                            ==========
+!==========                                                            ==========
+!================================================================================
+!
+!       nxt,nyt  : number of points in a tile for x,y directions 
+!   nxprocs,nyprocs  : number of mpi tiles in x,y directions
+!
+! Must have (nx-1)/nxt = integer or nx/nxt = integer. Same for nyt.
+! Then the number of processors (threads) is np = (nx-1)/nxt * (nxt-1)/nyt
+!
+! Alternatively, nxprocs,nyprocs can be set to the number of tiles in the x- and
+!  y-directions. Again, must have nxprocs evenly divide into nx-1
+!
+! Only set either nxt,nyt or nxproc,nyprocs
+!
+! At one time, vertical decomposition was working (nxt, nzprocs), but probably does not
+! in the current code
+!
+! Generally want to avoid nxt,nyt less than about 20 because at that point the communication overlap
+! becomes a larger percentage of the tile area, especially for higher-order advection
+!
+!   verbose_mpi : .false. : turns on stdout output from all processes (normall goes to /dev/null)
+!                  Can be useful for debugging, but otherwise not needed (default is off)
+&mpi_params
+             nxt =              30,
+             nyt =              30,
+!             nxprocs  = 2,
+!             nyprocs  = 2,
+!            verbose_mpi = .false.,
+/
+
+
+!================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  HOMOG_INIT
+!==========                                                            ==========
+!==========                                                            ==========
+!================================================================================
+!
+! sndtype :  1 = generate 'classic' Weisman-Klemp (WK) sounding 
+!         :  2 = read in 'sndfile' and interpolate to model grid
+!         :  3 = 'handmade' (hardcoded) WK sounding
+!
+! Weisman-Klemp (WK) sounding parameters (sndtype = 1 or 3):
+!  wtype : 0 = 1-D profile (tangent function as in Weisman & Klemp 1982; where "uz" acts as their Zs)
+!          1 = 1-D profile (straight/constant shear of us from 0 to uz)
+!          2 = 2-D profile (curved shear, half-circle hodograph with arc length of Us, as in Weisman & Klemp 1984)
+           3 = 1/4 circle to z=2km, then straight U-shear. 1/4-circle arc length is Us/3, linear shear is 2*Us/3 (from z=2km to z=6km)
+           4 = 1-D shear (two shear layers; see code in initsubs.F90)
+           5 = as for 3, but 1/4 circle has 2*Us/7, and linear shear goes from 2 to 7 km
+           6 = Tries to duplicate WRF quarter_ss sounding; Default value of chgtwrf is 2300m
+           7 = Replicates 1/4 circle + linear of the CM1 init
+           
+   wtype can also be used to override the winds or thermo of an input sounding:
+           10 = replace input with linear shear (as wtype=1)
+           20 = replace input with linear shear (as wtype=2)
+           101 = replace input psfc and sounding potential temperature profile with WK (i.e., preserve qv and winds)
+           102 = replace input sounding qv, psfc, and potential temperature profile with WK (i.e., preserve winds from input snd)
+           101 and 102 reset the surface pressure with input psfc
+           
+!  qsfc  : surface (boundary layer) vapor mixing ratio
+!  rhmax : maximum allowed relative humidity (default value 0.90)
+!  tsfc  : surface theta
+   thbl  : theta at top of the boundary layer (only if zbl > 0); Makes a linear theta profile from surface to zbl
+   zbl = -1 : Use to set boundary layer depth in meters (e.g., 1500.0)
+   ztr =         12000.0,
+   p_bl    = -1.   : Not implemented (to set BL depth by pressure instead of length)
+   thtr    = 343.  : tropopause potential temperature
+   ttr     = 213.  : tropopause air temperature
+
+   rhmax2 = 0.25   : max RH at z > zrhmax2 + zrhdel (only for zrhmax2)
+   zrhmax2 = -100. : If > 0, then reduce RH over the altitudes zrhmax2 to zrhmax2+zrhdel (linear ramp)
+   zrhdel  = 700. ! distance for transition from rhmax to rhmax2
+
+!  psfc  : surface pressure
+!    uz  : depth of shear layer
+!    us  : "length" of hodograph through uz
+!  z0,z1 : used for sndtype 3
+!
+!
+! Bubble parameters:
+!   nbble  : number of bubbles (up to maxbub = 10)
+! bbletype : (1 => tbble, 2 => tbble+0.1K random, 3 => tbble+Kogan (percentage fluctuation)
+!          tbble :  magnitude(s) of bubble temperature perturbation
+!          xrad : x-radius of bubble(s)  (set to greater than 1e7 to create an E-W 2D cylinder)
+!          yrad : y-radius of bubble(s)  (set to greater than 1e7 to create a  N-S 2D cylinder)
+!          zrad : z-radius of bubble(s)
+!         xcntr : x-center(s) of bubbles
+!         ycntr : y-center(s) of bubbles
+!         zcntr : z-center(s) of bubbles
+!
+
+&homog_init
+        sndtype =               1, 
+        sndfile =   'input.sound', 
+             uz =          5000.0, 
+             us =            10.0, 
+             z0 =          1000.0, 
+             z1 =          7000.0, 
+           qsfc =            14.0, 
+           psfc =          1000.0, 
+           tsfc =           300.0, 
+          wtype =               1, 
+          rhmax =             0.9,
+          shape =               0, 
+          dudz0 =            0.01, 
+          dudz1 =           0.005, 
+          nbble =               1,
+       bbletype =               1, 
+          tbble =             2.0,   3.0, 3.0,  
+           xrad =         10000.0, 1.0e4, 1.0e4, 
+           yrad =         10000.0, 1.0e4, 1.0e4,
+           zrad =          1400.0, 1500., 1500.,
+          xcntr =         30000.0, 5.0e4, 5.0e4,
+          ycntr =         30000.0, 7.0e4, 1.1e5,
+          zcntr =          1400.0, 1500., 1500.,
+/ 
+
+!================================================================================
+! FORCING namelist
+!  Here you can set up an ellipsoidal region of vertical forcing, which 
+!  induces horizontal convergence.  At the moment, only forcing of W is 
+!  available
+!  
+!  iforce :  0 = no forcing; 1 = forcing on
+!  nwfor  : number of forcing regions
+!  iwforce : 0 = no W forcing;  = W forcing
+!  iwshap  : -1 = no forcing in downdraft; 1 = forcing independent of W
+!  wfmeso  : value of dW/dt (acceleration, usually on the order of 1e-2 to 6e-2 (6e-2 is pretty strong)
+!  twstrt  : integer time (seconds) when forcing starts
+!  twstop  : integer time (seconds) for forcing to stop
+!  xwfmov  : x-direction movement of forcing region, -1000 moves region with mean wind in forcing depth
+!
+!================================================================================
+&forcing
+         iforce =           0,
+          nwfor =           1,
+        iwforce =           1, 
+         iwshap =          -1,     -1,   -1,
+         wfmeso =          6.0e-2, 2.0e-2, 4.0e-2
+         xwfrad =          6000.0, 6000., 2.5e3,
+         ywfrad =          6000.0, 6000., 2.5e3,
+         zwfrad =          1500.0, 1000., 1500.,
+         xwfcen =         16000.0,16000., 8.5e3,
+         ywfcen =         35000.0,20000., 6.0e3,
+         zwfcen =          1500.0, 1000., 1500.,
+         twstrt =          0,      3600,     0,
+         twstop =          1200,   5400,  3600,
+         xwfmov =          -1000., -1000.,-1000.
+/
+
+!================================================================================
+! FORCING namelist
+!  Here you can set up an ellipsoidal region of vertical forcing, which 
+!  induces horizontal convergence.  At the moment, only forcing of W is 
+!  available
+!  
+!  iforce :  0 = no forcing; 1 = forcing on
+!  nwfor  : number of forcing regions
+!  iwforce : 0 = no W forcing;  = W forcing
+!  iwshap  : -1 = no forcing in downdraft; 1 = forcing independent of W
+!  wfmeso  : value of dW/dt (acceleration, usually on the order of 1e-2 to 6e-2
+!  twstrt  : integer time (seconds) when forcing starts
+!  twstop  : integer time (seconds) for forcing to stop
+!  xwfmov  : x-direction movement of forcing region, -1000 moves region with mean wind in forcing depth
+!
+!================================================================================
+&forcing
+         iforce =           0,
+          nwfor =           1,
+        iwforce =           1, 
+         iwshap =          -1,     -1,   -1,
+         wfmeso =          6.0e-2, 2.0e-2, 4.0e-2
+         xwfrad =          6000.0, 6000., 2.5e3,
+         ywfrad =          6000.0, 6000., 2.5e3,
+         zwfrad =          1500.0, 1000., 1500.,
+         xwfcen =         16000.0,16000., 8.5e3,
+         ywfcen =         35000.0,20000., 6.0e3,
+         zwfcen =          1500.0, 1000., 1500.,
+         twstrt =          0,      3600,     0,
+         twstop =          1200,   5400,  3600,
+         xwfmov =          -1000., -1000.,-1000.
+/
+
+
+!================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  BSS_INIT
+!==========                                                            ==========
+!==========                                                            ==========
+!================================================================================
+!
+! Base State Substition (BSS) (Letkewicz et al. 2013, MWR)
+!
+!  This sets up BSS with up to maxnumbss different soundings. Here, BSS is done as 
+!  the model runs, without explicity restarts. BSS is done smoothly on each time
+!  step over the time period(s) specified by 'startbss' and 'endbss'.  Note that 
+!  overlapping time periods are not checked. For example, if the first BSS goes from 
+!  1000 s to 1500s, and the second goes from 1400 s to 1600s, the first one will end
+!  at 1400 s (and be incomplete).
+!
+!  Default values are shown. For multiple BSS, simply add to the appropriate namelist variables for
+!  non-default values. Mean U and V can be adjusted with 'umeanbss' and 'vmeanbss' if they 
+!  are set to values > -100 (m/s).
+!
+!  integer, parameter :: maxnumbss = 10
+!  
+!  integer :: numbss = 0                   ! number of BSS
+!  integer :: startbss(maxnumbss) = 0      ! starting time for each sounding
+!  integer :: endbss(maxnumbss)   = -1     ! ending time for each sounding 
+!  integer :: sndtypebss(maxnumbss) = 1    ! as for 'sndtype' in homog_init: 1 = WK, 2 = read in sounding
+!  integer :: wtypebss(maxnumbss) = 1      ! WK analytical sounding type (as for 'wtype' in homog_init)
+!  integer :: idoqbss(maxnumbss) = 0       ! substitute QV (0 = off, 1 = on)
+!  integer :: idopbss(maxnumbss) = 0       ! substitute pressure (pi) (0 = off, 1 = on)
+!  integer :: idotbss(maxnumbss) = 0       ! substitute theta (0 = off, 1 = on)
+!  integer :: idoubss(maxnumbss) = 1       ! substitute U (0 = off, 1 = on)
+!  integer :: idovbss(maxnumbss) = 1       ! substitute V (0 = off, 1 = on)
+!  real    :: usbss(maxnumbss) = 0.0       ! as for 'Us' in homog_init (sndtype=1)
+!  real    :: uslbss(maxnumbss) = 0.0      ! as for 'Usl' in homog_init (sndtype=1)
+!  real    :: uzbss(maxnumbss) = 2500.     ! as for 'Uz' in homog_init (sndtype=1)
+!  real    :: ubasebss(maxnumbss) = 0.0    ! as for 'Ubase' in homog_init (sndtype=1)
+!  real    :: psfcbss(maxnumbss) = 100000. ! as for 'psfc' in homog_init (sndtype=1)
+!  real    :: tsfcbss(maxnumbss)   = 300.  ! as for 'tsfc' in homog_init (sndtype=1)
+!  real    :: qsfcbss(maxnumbss)   = 14.   ! as for 'qsfc' in homog_init (sndtype=1)
+!  real    :: rhmaxbss(maxnumbss)  = 0.90  ! as for 'rhmax' in homog_init (sndtype=1)
+!  real    :: rhmax2bss(maxnumbss) = 0.25  ! as for 'rhmax2' in homog_init (sndtype=1)
+!  real    :: zrhmax2bss(maxnumbss) = -100. ! as for 'zrhmax2' in homog_init (sndtype=1)
+!  integer :: shapebss(maxnumbss) = 0       ! as for 'shape' in homog_init (sndtype=1)
+!  real    :: dudz0bss(maxnumbss) = 0.0     ! as for 'dudz0' in homog_init (sndtype=1)
+!  real    :: dudz1bss(maxnumbss) = 0.0     ! as for 'dudz1' in homog_init (sndtype=1)
+!  real    :: dudz2bss(maxnumbss) = 0.0     ! as for 'dudz2' in homog_init (sndtype=1)
+!  real    :: z0bss(maxnumbss)    = 99000.  ! as for 'z0' in homog_init (sndtype=3) (not used yet)
+!  real    :: z1bss(maxnumbss)    = 98000.  ! as for 'z1' in homog_init (sndtype=3) (not used yet)
+!  real    :: z2bss(maxnumbss)    = 97000.  ! as for 'z2' in homog_init (sndtype=3) (not used yet)
+!  real    :: umeanbss(maxnumbss) = -1000.0 ! set mean U in depth of domain
+!  real    :: vmeanbss(maxnumbss) = -1000.0 ! ! adjust mean U in depth of domain mean V in depth of domain
+!  character(LEN = 100) :: sndfilebss(maxnumbss)   = ' ' ! as for 'sndfile' in homog_init (sndtype=2)
+
+
+&bss_init
+       numbss = 0,   
+       startbss = 3600, 
+       endbss = 3900,   
+       sndtypebss = 1,
+       wtypebss = 1, 
+       usbss =  5,    
+       uslbss = 0,   
+       uzbss = 11000.,  
+       ubasebss = 1500., 
+       psfcbss = 1000.,  
+       tsfcbss = 300.,  
+       qsfcbss = 14.,  
+       umeanbss = 1.2,
+!       vmeanbss = 0.0,
+!       rhmaxbss = 0, 
+!       rhmax2bss = 0,
+!       zrhmax2bss
+       shapebss = 0, 
+!       dudz0bss = 0, 
+!       dudz1bss = 0, 
+!       dudz2bss = 0, 
+!       z0bss = 0,  
+!       z1bss = 0,  
+!       z2bss = 0,  
+       sndfilebss = 'input.sound',
+/
+
+!================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  OUTPUT_OPTIONS
+!==========                                                            ==========
+!==========                                                            ==========
+!================================================================================
+
+!
+!                      default 
+!                       value
+!  inetchargetend       : 0 : output net charge tendency arrays (electrification only)
+!  ioutput_xtrachgsep   : 0 : output special charge separation rate arrays
+!  ioutput_hwind3d      : 0 : output horizontal wind speed (every level)
+!  ioutput_temC3d       : 1 : output temperature in Celsius
+!  ioutput_pres3d       : 1 : output pressure (Pa) (in addition to state variable Pi)
+!  ioutput_thv3d        : 1 : output Theta-v
+!  ioutput_workshop     : 0 : extra diagnostic arrays for workshop
+!  ioutput_ssw          : 0 : percent saturation wrt. liquid
+!  ioutput_ssi          : 0 : percent saturation wrt. ice
+!  ioutput_rh           : 0 : relative humidity (percent)
+!  ioutput_cwdia        : 0 : droplet mean diameter
+!  ioutput_ssmx         : 0 : maximum supersaturation (liquid) for a parcel
+!
+!
+
+&output_options
+        inetchargetend      = 0,
+        ioutput_xtrachgsep  = 0,
+        ioutput_hwind3d     = 0,
+        ioutput_temC3d      = 1,
+        ioutput_pres3d      = 1,
+        ioutput_thv3d       = 1,
+        ioutput_workshop    = 0,
+        ioutput_ssw         = 0,
+        ioutput_ssi         = 0,
+        ioutput_rh          = 0,
+        ioutput_cwdia       = 0,
+        ioutput_ssmx        = 0,
+/
+
+!================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  TRAJECTORIES
+!==========                                                            ==========
+!==========                                                            ==========
+!================================================================================
+!
+! This namelist also replaces the old balloon namelist, especially using the 'riserate' 
+! parameter. When electrification is turned on, extra variables (fields, 
+! lightning field changes, etc.) are added
+!
+!  integer :: itraj = 0 ! 0 = no trajectories; 
+!                       ! 1 = write trajectories to netcdf only
+!                       ! 2 = write trajectories to both netcdf and text files
+!                       ! 3 = write trajectories to text files only
+!  integer :: maxtraj = 0 ! number of trajectories (caculated when itraj >= 1)
+!  integer :: ntraj   = 0 ! number of trajectories (caculated when itraj >= 1)
+!  integer :: ntrajtype = 1 ! 1 for parcel only, 2 to add rain trajectory (kessler or ZVD), 
+!                           ! 3 adds graupel+hail (ZVD), 4 adds rain+graupel + hail (ZVD)
+! initial region (grid points) for trajectories (global coordinates!):
+!  integer :: ixtrj1 = 1, ixtrj2 = 1 ! x-grid range
+!  integer :: jytrj1 = 1, jytrj2 = 1 ! y-grid range
+!  integer :: kztrj1 = 1, kztrj2 = 1 ! z-grid range
+!
+! Spacing (stride) for trajectory starting points (in grid points)
+!  integer :: dxtraj = 1 
+!  integer :: dytraj = 1
+!  integer :: dztraj = 1
+!
+! i.e., every dxtraj points along ixtrj1 to ixtrj2, etc.
+!
+! Trajectory start and stop times (seconds). Trajectories can continue from a model restart
+!  integer :: time_traj1 = 0 ! start time
+!  integer :: time_traj2 = 0 ! stop time
+!
+! For balloon simulations, set (constant) riserate to some positive value (like 5 m/s) for vertical
+! rise rate relative to W. Vertical motion is then W + riserate.
+!  real    :: riserate = 0.0
+
+
+&trajectories            
+       itraj = 1,
+       ntrajtype = 1,
+       ixtrj1 = 26, 
+       ixtrj2 = 42, 
+       jytrj1 = 24, 
+       jytrj2 = 40,
+       kztrj1 =  8, 
+       kztrj2 = 14,
+       dxtraj = 2,
+       dytraj = 2,
+       dztraj = 2,
+       time_traj1 = 1200,
+       time_traj2 = 3000,
+       riserate = 0.0
+/
+
+!================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  LFO_PARAMS
+!==========                                                            ==========
+!==========                                                            ==========
+!================================================================================
+!
+! rho_x : particle density of precip type x (qr = rain, qs = snow, qh = graupel/hail)
+! cnox  : Intercept value for type x
+!  NOTE: rho_qh is used by the ZIEG scheme (always), and the snow and hail params are used for ZIEG/ipconc=3
+!
+! autoconversion : 0 = standard LFO threshold on qc 
+!                : 1 = Ferrier threshold (checks for drop size of 20 microns)
+!                : Can set here or in ice10_params; IF SET IN ice10_params IT WILL OVERRIDE VALUE HERE!
+!
+! ccn            : For LFO/WARMLFO/ICE10(single moment) = assumed ccn value 
+!                : For ZIEG/ICE10DM = surface ccn concentration (scaled by air density; can set negative value to initialize as constant in domain)
+!                : Can set here or in ice10_params; IF SET IN ice10_params IT WILL OVERRIDE VALUE HERE!
+&lfo_params
+          rho_qr = 1000., 
+          cnor   = 8.0e6,
+          rho_qs = 100., 
+          cnos   = 3.0e6, 
+          rho_qh = 900., 
+          cnoh   = 4.0e4,
+          autoconversion = 1,
+/
+
+!================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  ICE10_PARAMS
+!==========                                                            ========== 
+!==========                                                            ==========
+!================================================================================
+!
+! Used by 10ICE and ZIEG/ZVD schemes
+! 
+! ipconc :  0 = single moment 
+!        :  1 = two-moment for ice crystals only (ICE10DM/ZVD/ZIEG)
+!        :  2 = two-moment for ice crystals and cloud droplets (ICE10DM/ZVD/ZIEG only)
+!        :  3 = two-moment cloud droplets, cloud ice, and rain (ICE10DM/ZVD/ZIEG)
+!               For ipconc .le. 3,  ZEIG/ZVD uses snow and graupel intercepts and densities from lfo_params
+!        :  5 = full two-moment (adds snow and graupel(s))     (ZEIG/ZVD/ZVDH)  (not recommended in ICE10DM yet)
+!        :  8 = partial 3-moment (rain, graupel, and hail) (not available in release)
+!       NOTE: For ZIEG/ZVD only allowed options are 3 and 5
+!
+! itfall :  0 = box lagrangian fallout (1st order)     (default)
+!        :  2 = 6th-order monotonic                    (not recommended)
+! rz     :  reflectivity conservation factor (Ferrier 1994) (recommend default for now)
+! fconv  :  factor to allow larger depletion rates for some processes in 10ICE
+!
+! rcond  : (ZIEG only) 
+!          0 -> no condensation on rain; 
+!          1-> simple condensation on rain (not recom.); 
+!          2-> cond. on rain with droplets (default)
+!
+! SEE namelist_module.f90 for current list of namelist variables and
+!      and micro_module.f90 for default values
+!
+! For elec_params, see elec_module.f90 for default values
+!
+&ice10_params 
+          ipconc         = 5,
+          itfall         = 0,
+          fconv          = 1.0,
+/
+
+!================================================================================
+!  ELECTRICITY PARAMETERS
+!
+!
+!          ipelec    : NOTE: Must also append 'E' on the end of the microphysics name!
+!                      : 0 = no electricity
+!                      : 1 = supposed to be charging only by ion attachment, but something is wrong
+!                      : 2 = NI charging, Inductive off
+!                      : 3 = NI + Inductive (graupel-droplet, controlled by erbnd and costhe) charge separation
+!           ilight     : 1 = bulk discharge (cylindrical volume)
+!                      : 2 = branched stochastic scheme (default) (Mansell et al. 2002)
+!                      : 3 = MacGorman et al. 2001
+!          nonigrd        = selects "family" of noninductive charging schemes (look in saund.02b.f for some further details)
+!                                   nonigrd = -1 : Takahashi variants
+!                                   nonigrd = 0 : UMIST schemes (S91, SP98, etc)
+!                                   nonigrd = 2  : Gardiner/Ziegler (rgard is multiplier, default rgard=1)
+!                                   nonigrd = -10 : turn off NI charging, but run other electricity processes
+!          ftauopt = 1         ! GZ charging method for shifting Trev in the ftau function: 
+!                              !  1 = Ziegler/Straka scaled 
+!                              !  2 = Left-right shift of the function (doesn't change magnitude)
+!          isaund         = selects member of NI scheme family (see saund.02b.f for TAK and UMIST schemes)
+!          rarfac         = 1.0   ! Factor to adjust RAR used in SP and RR schemes (check saund.02b.f to see which ones use this)
+!          elgtfdel       = 0.9,  ! Fraction of breakeven field for possible initiation points
+!          elgtdel        = 10.0e3, ! as for elgtfdel but delta-E for uniform init. threshold
+!          overvolt       = 1.0,    ! factor to increase  breakeven initiation threshold
+!          dslight        = 500.,   ! resolution of lightning, set to integer division of dx that is close to dz.  For example, if dx=1000., could set dslight to 500.; set dslight = value of dx for high resolution (500m or better).
+!          lightintx = -1,  If set to >= 1, this overrides setting of dslight to be dx/lightintx
+!          lightintz = -1,  (ONLY FOR UNSTRETCHED Z-AXIS) If set to >= 1, this sets dslightz to be dz/lightintx
+!          ibal           = 2,      ! scheme to maintain charge balance on lightning channel (use 2)
+!          l2nde          = 2,      ! 1 = 1st order difference for E next to channel; 2 = 2nd order (recommended)
+!          intfg          = 1,      ! interval for "full grid" relaxation around channel.  Recommend 1 or 2
+!          mdel           = 25,     ! extra buffer zone around channel (in gridpoints).  Recommend value such that mdel*dslight > 15 km.
+!          fecrit         = 0.7,    ! fraction of init. threshold to use as propagation threshold
+!          eint           = 200.,   ! internal electric field (represents channel resistance, i.e., imperfect conductor)
+!          cgthres        = 2000.,  ! Threshold height to declare a CG flash (not only criterion: also must have correct sign of potential)
+!          erbnd     = droplet rebound efficiency (for inductive charging)
+!          costhe    = average cosine of impact angle (for inductive charging)
+&elec_params
+          ipelec         = 0,
+          nonigrd        = 0,
+          isaund         = 11,
+          elgtfdel       = 0.9,
+          elgtdel        = 10.0e3,
+          overvolt       = 1.0,
+          lightintx      = 2,
+          ibal           = 2,
+          l2nde          = 2,
+          intfg          = 1,
+          mdel           = 25,
+          fecrit         = 0.7,
+          eint           = 200.,
+          cgthres        = 2000.,
+          erbnd  = 0.01,
+          costhe = 0.35
+/
+
+
+!================================================================================
+!==========                                                            ==========
+!==========                                                            ==========
+!==========                  NAMELIST:  PARAMH
+!==========                                                            ==========
+!==========                                                            ==========
+!================================================================================
+!
+! Description/default values
+!
+!       lfwds:  .false. -> (default) Use RK3 for advection of all variables
+!               .true.  -> Use RK3 for advection of UVW, Theta, and KM, and 6th-order Crowley for other scalars
+!
+!  Turbulence parameters and default values:
+!     mix_type = 1,       ! [-1,0,1]=> [ahighk(constant), SMAG (diagnosed), TKE (prognosed Sqrt)]
+                       -1 : A constant Km value (ahighk) is used
+                        0 : Diagnostic Smagorinsky KM
+                        1 : "Full" TKE scheme predicting KM (via square root of TKE), following Deardorff (1980) and KW 1978
+
+!     len_type = 0,       ! [0,1,2] => [volume,dz,BLR] Mixing length options (horiz. and vert. use the same mixing length in all options)
+                        0 : (default) Mixing length is the cube root of the grid cell volume, i.e., Cm*(dx*dy*dz)**(1./3.)
+                        1 : Mixing length is set to dz of the cell, i.e., Cm * dz
+                        2 : "BLR" method, where mlen is  Cm/ (1./(0.4*gz(k,1)) + 1./Lmax)
+                            where gz is the altitude of the grid cell center, and Lmax is a constant (default 500m)
+                            Useful for 'pizza box' grid cells near the surface ( dx > dz ) to help preserve
+                            environmental wind shear in barely-stable boundary layers
+                        3 : Mixing length is set by Lmax, i.e., mlen = Cm * Lmax
+                        4 : Experimental combination of 0 and 2 (needs further development)
+                            
+!     rmbasekm = 0,       ! [0,1]   => [dont rm, subtract kmbase method]
+                      1 : turn on removal of non-zero TKE source in the base state. Useful for controlling
+                          growth of TKE in soundings that have layers with small Richardson numbers, as 
+                          can be typical of observed boundary layers in supercell environments.
+                          
+!     Cm       = 0.21     ! generation coefficient
+!     Ce       = 0.70     ! dissipation coefficient
+!     Pr       = 2.5      ! Prandtl number (inverse) (can be in range of 2.5 to 3)
+!     Lmax     = 500.      ! mixing length used by option len_type = 2
+!     ahighk   = 1000.     ! maximum applied value of KM. Actual KM value is allowed to be larger 
+                             to preserve gradients.
+!
+! Coriolis:
+!     coriol           = 0.0,  ! set to any positive number, and the value of LAT (from gridn namelist) will
+                                be used to compute the coriolis terms (f-plane)
+!
+! Boundary conditions:
+!     bcx     : East/West:    1 = KW radiative (default), 2 = periodic, 0 = mirror (not tested or working)
+!     bcy     : North/South:  1 = KW radiative (default), 2 = periodic, 0 = mirror (not tested or working)
+!
+! Other:
+!    rayd_mag = 0.001    ! Vertical rayleigh damping magnitude
+!    damph    = 0.01     ! coefficient for 6th-order computational filter (monotonic, Xue 2000)
+
+Advection options:
+    atypes1 : 0 :  scalar advection option for steps 1 and 2 of RK3
+    atypes2 : 1 : scalar advection option for step 3 of RK3
+    atypem1 : 0 : momentum advection option for steps 1 and 2 of RK3
+    atypem2 : 0 : momentum advection option for step 3 of RK3
+    
+    Values:
+       0 : 5th-order upwind advection, no extra filtering
+       1 : 5th-order WENO scheme (weighted essentially non-oscillatory)
+       
+     The default options are generally recommended for simulations with dx >= 1km, for fine-grid simulations
+     of supercells, atypem2 = 16 is a good option (9th-order WENO) to limit ringing in small-scale strong vortices
+     Other options (such as 6th-order) are available, but rarely used (see header of advectrk.F90)
+     
+    
+     integer :: iuvwadv = 1 !  1 = normal; 2 = box scheme; 3 = turns off wind update for pure scalar advection (kinematic model)
+
+Surface physics
+  isfcphys = 1 : Does not call radflx (M. Buban implementation)
+  isfcphys = 2,3 : normal (M. Buban implementation)
+  isfcphys = 4 : Grabowski (2006, QJRMS) prescribed heat flux instead of calling sfcphy
+
+
+&paramh
+      lfwds      = .false.,
+/
