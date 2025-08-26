@@ -477,7 +477,8 @@
       real ac1,bc, c1,d1,e1,f1,p380,tmp,tmp1,tmp2,tmp3,tmp4,tmp5,tmp6,temp3 ! , sstdy, super
       real :: flim, xmass
       real dw,dwr
-      double precision :: tmpc, tmpz, tmpzmlt
+      double precision :: tmpz, tmpzmlt
+      real :: tmpc
       real ratio, delx, dely
       real dbigg,volt
       real chgtmp,fac,mixedphasefac
@@ -654,7 +655,7 @@
       real ::  zx(ngs,lr:lhab)
       real ::  zxmxd(ngs,lr:lhab)
       real ::  g1x(ngs,lr:lhab)
-      
+
       real :: g1xmax,g1xmin
       real :: qsimxdep(ngs) ! max sublimation of qi+qs+qis
       real :: qsimxsub(ngs) ! max depositionof qi+qs+qis
@@ -893,6 +894,7 @@
       real qsacw(ngs) ! ,qwacs(ngs),
       real qhacw(ngs) ! qwach(ngs),
       real :: qhlacw(ngs), qxacwtmp, qxacrtmp, qxacitmp, qxacstmp !
+      real :: cxacstmp,cxacitmp
       real vhacw(ngs), vsacw(ngs), vhlacw(ngs), vhlacr(ngs)
 
       real qwacf(ngs),qfacw(ngs)
@@ -1431,9 +1433,9 @@
       ftau(tau) = (-1.7e-5)*tau**3 - 0.003*tau**2 - 0.05*tau + 0.13
 
 
-      galpha(a_in) = ((4. + a_in)*(5. + a_in)*(6. + a_in))/((1. + a_in)*(2. + a_in)*(3. + a_in))
-      dgalpha(a_in) = (876. + 1260.*a_in + 621.*a_in**2 + 126.*a_in**3 + 9.*a_in**4)/            &
-     &  (36. + 132.*a_in + 193.*a_in**2 + 144.*a_in**3 + 58.*a_in**4 + 12.*a_in**5 + a_in**6)
+!      galpha(a_in) = ((4. + a_in)*(5. + a_in)*(6. + a_in))/((1. + a_in)*(2. + a_in)*(3. + a_in))
+!      dgalpha(a_in) = (876. + 1260.*a_in + 621.*a_in**2 + 126.*a_in**3 + 9.*a_in**4)/            &
+!     &  (36. + 132.*a_in + 193.*a_in**2 + 144.*a_in**3 + 58.*a_in**4 + 12.*a_in**5 + a_in**6)
 !
 ! ####################################################################
 !
@@ -2283,8 +2285,10 @@
      &              ((3.0 + alphar)*(2.0 + alphar)*(1.0 + alphar))
          g1x(:,lh) = (6.0 + alphah)*(5.0 + alphah)*(4.0 + alphah)/ &
      &               ((3.0 + alphah)*(2.0 + alphah)*(1.0 + alphah))
-         g1x(:,lhl) = (6.0 + alphahl)*(5.0 + alphahl)*(4.0 + alphahl)/ &
+           IF ( lhl > 0 ) THEN
+            g1x(:,lhl) = (6.0 + alphahl)*(5.0 + alphahl)*(4.0 + alphahl)/ &
      &               ((3.0 + alphahl)*(2.0 + alphahl)*(1.0 + alphahl))
+           ENDIF
          ENDIF
 
 ! load charges
@@ -5965,6 +5969,7 @@
        tmp1 = 0.0
        cracw(mgs) = 0.0
        cracr(mgs) = 0.0
+       zracr(mgs) = 0.0
        ec0(mgs) = 1.e9
       IF ( qx(mgs,lc) .gt. qxmin(lc) .and. qx(mgs,lr) .gt. qxmin(lr)    &
      &      .and. qracw(mgs) .gt. 0.0 ) THEN
@@ -6015,7 +6020,7 @@
         ! check median volume diameter
         IF ( icracrthresh > 1 ) THEN
          IF ( imurain == 1 ) THEN
-           tmp =  (3.67+alpha(mgs,lr))*xdia(mgs,lr,1) ! median volume diameter; units of mm (Ulbrich 1983, JCAM)
+           tmp =  (3.67+alpha(mgs,lr))*xdia(mgs,lr,1) ! median volume diameter; units of m (Ulbrich 1983, JCAM)
          ELSE ! imurain == 3, 
            tmp =  (1.678+alpha(mgs,lr))**(1./3.)*xdia(mgs,lr,1) ! units of mm (using method of Ulbrich 1983. See ventillation_stuff.nb)
          ENDIF
@@ -6544,7 +6549,8 @@
                tmp = crcnw(mgs)
                tmp2 = qrcnw(mgs)*cx(mgs,lr)/qx(mgs,lr)
                ! try mass*diameter-weighted average of old and new Dmr (using full qc mass)
-               crcnw(mgs) = (tmp*xdia(mgs,lc,3)*qx(mgs,lc)+tmp2*xdia(mgs,lr,3)*qx(mgs,lr))/(xdia(mgs,lc,3)*qx(mgs,lc)+xdia(mgs,lr,3)*qx(mgs,lr))
+               crcnw(mgs) = (tmp*xdia(mgs,lc,3)*qx(mgs,lc)+tmp2*xdia(mgs,lr,3)*qx(mgs,lr))/ &
+                             (xdia(mgs,lc,3)*qx(mgs,lc)+xdia(mgs,lr,3)*qx(mgs,lr))
              ELSEIF ( ( dmropt == 7 ) .and. qx(mgs,lr) > qxmin(lr) ) THEN
                tmp = crcnw(mgs)
                tmp2 = qrcnw(mgs)*cx(mgs,lr)/qx(mgs,lr)
@@ -6554,7 +6560,8 @@
                tmp = crcnw(mgs)
                tmp2 = qrcnw(mgs)*cx(mgs,lr)/qx(mgs,lr)
                ! try sqrt(diameter)-weighted average of old and new Dmr
-               crcnw(mgs) = (tmp*sqrt(xdia(mgs,lc,3))+tmp2*sqrt(xdia(mgs,lr,3)))/(sqrt(xdia(mgs,lc,3))+sqrt(xdia(mgs,lr,3)))
+               crcnw(mgs) = (tmp*sqrt(xdia(mgs,lc,3))+tmp2*sqrt(xdia(mgs,lr,3)))/  &
+                             (sqrt(xdia(mgs,lc,3))+sqrt(xdia(mgs,lr,3)))
              ENDIF
            ELSEIF ( dmrauto == 1  .and. cx(mgs,lr) > cxmin) THEN
              IF ( qx(mgs,lr) > qxmin(lr) ) THEN
@@ -9421,8 +9428,6 @@
 
        ELSEIF ( ibinhlmlr == 1 ) THEN ! use incomplete gamma functions to approximate the bin results
 
-! #ifdef 1
-! #if (defined 1) && defined( 1 ) || defined( COMMASTMP )
 
        qhlmlr(mgs) =   &
      &   min(   &
@@ -11418,7 +11423,7 @@
 !
       do mgs = 1,ngscnt
       
-      IF ( tfrdry < temg(mgs) .and. temg(mgs) < tfr ) THEN
+      IF ( tfrdry < temg(mgs) .and. temg(mgs) < tfr ) THEN ! {
 !
 !      qswet(mgs) =
 !     >  ( xdia(mgs,ls,1)*swvent(mgs)*cx(mgs,ls)*fwet1(mgs)
@@ -11449,6 +11454,7 @@
             IF ( qhacw(mgs)*dtp > qxmin(lh) ) THEN
               vt = abs(vtxbar(mgs,lh,1)-vtxbar(mgs,lc,1))
 
+          ! dry growth of qc for D > Dwet to substract from qhacw
           qxacwtmp = 0.25*pi*ehw(mgs)*cx(mgs,lh)*(qx(mgs,lc)-qcwresv(mgs))*vt*   &
      &         (  tmp1*da0lh(mgs)*xdia(mgs,lh,3)**2 +     &
      &            tmp2*dab1lh(mgs,lh,lc)*xdia(mgs,lh,3)*xdia(mgs,lc,3) +    &
@@ -11462,6 +11468,7 @@
        vt = Sqrt((vtxbar(mgs,lh,1)-vtxbar(mgs,lr,1))**2 +    &
      &            0.04*vtxbar(mgs,lh,1)*vtxbar(mgs,lr,1) )
 
+          ! dry growth of qr for D > Dwet to substract from qhacr
          qxacrtmp = 0.25*pi*ehr(mgs)*cx(mgs,lh)*qx(mgs,lr)*vt*   &
      &         (  tmp1*da0lh(mgs)*xdia(mgs,lh,3)**2 +     &
      &            tmp2*dab1lh(mgs,lh,lr)*xdia(mgs,lh,3)*xdia(mgs,lr,3) +    &
@@ -11481,20 +11488,33 @@
         IF ( qhaci(mgs)*dtp > qxmin(lh) ) THEN
               vt = abs(vtxbar(mgs,lh,1)-vtxbar(mgs,li,1))
 
+          ! note that ehi=1 implicitly here
           qxacitmp = 0.25*pi*ehiclsn(mgs)*cx(mgs,lh)*qx(mgs,li)*vt*   &
      &         (  tmp1*da0lh(mgs)*xdia(mgs,lh,3)**2 +     &
      &            tmp2*dab1lh(mgs,lh,li)*xdia(mgs,lh,3)*xdia(mgs,li,3) +    &
      &            tmp3*da1(li)*xdia(mgs,li,3)**2 )
+        
+          cxacitmp =    &
+     &        0.25*pi*ehiclsn(mgs)*cx(mgs,lh)*cx(mgs,li)*vt*   &
+     &         (  tmp1*da0lh(mgs)*xdia(mgs,lh,3)**2 +     &
+     &            tmp2*dab0lh(mgs,lh,li)*xdia(mgs,lh,3)*xdia(mgs,li,3) +    &
+     &            tmp3*da0(li)*xdia(mgs,li,3)**2 )
         ENDIF
 
         qxacstmp = 0.0
         IF ( qhacs(mgs)*dtp > qxmin(lh) ) THEN
               vt = abs(vtxbar(mgs,lh,1)-vtxbar(mgs,ls,1))
 
+          ! note that ehs=1 implicitly here
           qxacstmp = 0.25*pi*ehsclsn(mgs)*cx(mgs,lh)*qx(mgs,ls)*vt*   &
-     &         (  da0lh(mgs)*xdia(mgs,lh,3)**2 +     &
-     &            dab1lh(mgs,lh,ls)*xdia(mgs,lh,3)*xdia(mgs,ls,3) +    &
-     &            da1(ls)*xdia(mgs,ls,3)**2 )
+     &         (  tmp1*da0lh(mgs)*xdia(mgs,lh,3)**2 +     &
+     &            tmp2*dab1lh(mgs,lh,ls)*xdia(mgs,lh,3)*xdia(mgs,ls,3) +    &
+     &            tmp3*da1(ls)*xdia(mgs,ls,3)**2 )
+
+          cxacstmp = 0.25*pi*ehsclsn(mgs)*cx(mgs,lh)*cx(mgs,ls)*vt*   &
+     &         (  tmp1*da0lh(mgs)*xdia(mgs,lh,3)**2 +     &
+     &            tmp2*dab0lh(mgs,lh,ls)*xdia(mgs,lh,3)*xdia(mgs,ls,3) +    &
+     &            tmp3*da0(ls)*xdia(mgs,ls,3)**2 )
         ENDIF
 
              qxwettmp =   &
@@ -11505,6 +11525,11 @@
           qhwet(mgs) = qhacw(mgs) + qhacr(mgs) + qhaci(mgs) + qhacs(mgs) &
                         - ehi(mgs)*qxacitmp - ehs(mgs)*qxacstmp          &
                         -  qxacwtmp - qxacrtmp + qxwettmp
+
+          qhaci(mgs) =  qhaci(mgs) + (1.0 - ehi(mgs))*qxacitmp
+          qhacs(mgs) =  qhacs(mgs) + (1.0 - ehs(mgs))*qxacstmp
+          chaci(mgs) =  chaci(mgs) + (1.0 - ehi(mgs))*cxacitmp
+          chacs(mgs) =  chacs(mgs) + (1.0 - ehs(mgs))*cxacstmp
 
          ! qhacw(mgs) = Min( qhacw(mgs), 0.5*qx(mgs,lc)*dtpinv )
            
@@ -11571,6 +11596,12 @@
      &         (  tmp1*da0lf(mgs)*xdia(mgs,lf,3)**2 +     &
      &            tmp2*dab1lh(mgs,lf,li)*xdia(mgs,lf,3)*xdia(mgs,li,3) +    &
      &            tmp3*da1(li)*xdia(mgs,li,3)**2 )
+
+          cxacitmp =    &
+     &        0.25*pi*eficlsn(mgs)*cx(mgs,lf)*cx(mgs,li)*vt*   &
+     &         (  tmp1*da0lf(mgs)*xdia(mgs,lf,3)**2 +     &
+     &            tmp2*dab0lh(mgs,lf,li)*xdia(mgs,lf,3)*xdia(mgs,li,3) +    &
+     &            tmp3*da0(li)*xdia(mgs,li,3)**2 )
         ENDIF
 
         qxacstmp = 0.0
@@ -11578,9 +11609,14 @@
               vt = abs(vtxbar(mgs,lf,1)-vtxbar(mgs,ls,1))
 
           qxacstmp = 0.25*pi*efsclsn(mgs)*cx(mgs,lf)*qx(mgs,ls)*vt*   &
-     &         (  da0lf(mgs)*xdia(mgs,lf,3)**2 +     &
-     &            dab1lh(mgs,lf,ls)*xdia(mgs,lf,3)*xdia(mgs,ls,3) +    &
-     &            da1(ls)*xdia(mgs,ls,3)**2 )
+     &         (  tmp1*da0lf(mgs)*xdia(mgs,lf,3)**2 +     &
+     &            tmp2*dab1lh(mgs,lf,ls)*xdia(mgs,lf,3)*xdia(mgs,ls,3) +    &
+     &            tmp3*da1(ls)*xdia(mgs,ls,3)**2 )
+
+          cxacstmp = 0.25*pi*efsclsn(mgs)*cx(mgs,lf)*cx(mgs,ls)*vt*   &
+     &         (  tmp1*da0lf(mgs)*xdia(mgs,lf,3)**2 +     &
+     &            tmp2*dab0lh(mgs,lf,ls)*xdia(mgs,lf,3)*xdia(mgs,ls,3) +    &
+     &            tmp3*da0(ls)*xdia(mgs,ls,3)**2 )
         ENDIF
 
              qxwettmp =   &
@@ -11593,6 +11629,11 @@
           qfwet(mgs) = qfacw(mgs) + qfacr(mgs) + qfaci(mgs) + qfacs(mgs) &
                         - efi(mgs)*qxacitmp - efs(mgs)*qxacstmp          &
                         -  qxacwtmp - qxacrtmp + qxwettmp
+
+          qfaci(mgs) =  qfaci(mgs) + (1.0 - efi(mgs))*qxacitmp
+          qfacs(mgs) =  qfacs(mgs) + (1.0 - efs(mgs))*qxacstmp
+          cfaci(mgs) =  cfaci(mgs) + (1.0 - efi(mgs))*cxacitmp
+          cfacs(mgs) =  cfacs(mgs) + (1.0 - efs(mgs))*cxacstmp
 
          ! qfacw(mgs) = Min( qfacw(mgs), 0.5*qx(mgs,lc)*dtpinv )
            
@@ -11659,6 +11700,13 @@
      &         (  tmp1*da0lhl(mgs)*xdia(mgs,lhl,3)**2 +     &
      &            tmp2*dab1lh(mgs,lhl,li)*xdia(mgs,lhl,3)*xdia(mgs,li,3) +    &
      &            tmp3*da1(li)*xdia(mgs,li,3)**2 )
+
+          cxacitmp =    &
+     &        0.25*pi*ehliclsn(mgs)*cx(mgs,lhl)*cx(mgs,li)*vt*   &
+     &         (  tmp1*da0lhl(mgs)*xdia(mgs,lhl,3)**2 +     &
+     &            tmp2*dab0lh(mgs,lhl,li)*xdia(mgs,lhl,3)*xdia(mgs,li,3) +    &
+     &            tmp3*da0(li)*xdia(mgs,li,3)**2 )
+
         ENDIF
 
         qxacstmp = 0.0
@@ -11666,9 +11714,14 @@
               vt = abs(vtxbar(mgs,lhl,1)-vtxbar(mgs,ls,1))
 
           qxacstmp = 0.25*pi*ehlsclsn(mgs)*cx(mgs,lhl)*qx(mgs,ls)*vt*   &
-     &         (  da0lhl(mgs)*xdia(mgs,lhl,3)**2 +     &
-     &            dab1lh(mgs,lhl,ls)*xdia(mgs,lhl,3)*xdia(mgs,ls,3) +    &
-     &            da1(ls)*xdia(mgs,ls,3)**2 )
+     &         (  tmp1*da0lhl(mgs)*xdia(mgs,lhl,3)**2 +     &
+     &            tmp2*dab1lh(mgs,lhl,ls)*xdia(mgs,lhl,3)*xdia(mgs,ls,3) +    &
+     &            tmp3*da1(ls)*xdia(mgs,ls,3)**2 )
+
+          cxacstmp = 0.25*pi*ehlsclsn(mgs)*cx(mgs,lhl)*cx(mgs,ls)*vt*   &
+     &         (  tmp1*da0lhl(mgs)*xdia(mgs,lhl,3)**2 +     &
+     &            tmp2*dab0lh(mgs,lhl,ls)*xdia(mgs,lhl,3)*xdia(mgs,ls,3) +    &
+     &            tmp3*da0(ls)*xdia(mgs,ls,3)**2 )
         ENDIF
 
              qxwettmp =   &
@@ -11683,18 +11736,23 @@
                         - ehli(mgs)*qxacitmp - ehls(mgs)*qxacstmp          &
                         -  qxacwtmp - qxacrtmp + qxwettmp
 
+          qhlaci(mgs) =  qhlaci(mgs) + (1.0 - ehli(mgs))*qxacitmp
+          qhlacs(mgs) =  qhlacs(mgs) + (1.0 - ehls(mgs))*qxacstmp
+          chlaci(mgs) =  chlaci(mgs) + (1.0 - ehli(mgs))*cxacitmp
+          chlacs(mgs) =  chlacs(mgs) + (1.0 - ehls(mgs))*cxacstmp
+
         !   ELSE
         !     qhlwet(mgs) = qhldry(mgs)
         !   ENDIF
          ENDIF ! incwet
        ENDIF
        
-       ELSE
+       ELSE ! ( tfrdry < temg(mgs) .and. temg(mgs) < tfr )
        
         qhwet(mgs) = qhdry(mgs)
         qhlwet(mgs) = qhldry(mgs)
         qfwet(mgs) = qfdry(mgs)
-       ENDIF
+       ENDIF ! } ( tfrdry < temg(mgs) .and. temg(mgs) < tfr )
 !
 !      qhlwet(mgs) = qhldry(mgs)
 
@@ -11940,15 +11998,19 @@
 ! collection efficiency modification
 
       IF ( ehi(mgs) .gt. 0.0 ) THEN
+        IF ( incwet == 0 ) THEN
         qhaci(mgs) = Min(qimxd(mgs),qhaci0(mgs))  ! effectively sets collection eff to 1
         chaci(mgs) = Min(cimxd(mgs),chaci0(mgs))  ! effectively sets collection eff to 1
+        ENDIF
       ENDIF
       IF ( ehs(mgs) .gt. 0.0 ) THEN
 !        qhacs(mgs) = Min(qsmxd(mgs),qhacs(mgs)/ehs(mgs))  ! effectively sets collection eff to 1
+        IF ( incwet == 0 ) THEN
         qhacs(mgs) = Min(qsmxd(mgs),qhacs0(mgs)) !/ehs(mgs)                   ! divide out the collection efficiency
         chacs(mgs) = Min(csmxd(mgs),chacs0(mgs)) !/ehs(mgs)                   ! divide out the collection efficiency
-        ehs(mgs) = ehsmax ! 1.0 ! min(ehsfrac*ehs(mgs),ehsmax)            ! modify it
         qhacs(mgs) = Min(qsmxd(mgs),qhacs(mgs))   ! plug it back in
+        ENDIF
+        ehs(mgs) = ehsmax ! 1.0 ! min(ehsfrac*ehs(mgs),ehsmax)            ! modify it
       ENDIF
 
 ! be sure to catch particles with wet surfaces but not in wet growth to turn off Hallett-Mossop
@@ -12019,7 +12081,7 @@
 !         vhlacr(mgs) = rho0(mgs)*qhlacr(mgs)/xdn0(lr)
         ENDIF
 
-      IF ( ehli(mgs) .gt. 0.0 ) THEN
+      IF ( ehli(mgs) .gt. 0.0 .and. incwet == 0 ) THEN
         qhlaci(mgs) = Min(qimxd(mgs),qhlaci0(mgs))  ! effectively sets collection eff to 1
         chlaci(mgs) = Min(cimxd(mgs),chlaci0(mgs))  ! effectively sets collection eff to 1
       ENDIF
@@ -12027,7 +12089,7 @@
 !      IF ( ehls(mgs) .gt. 0.0 ) THEN
 !        qhlacs(mgs) = Min(qsmxd(mgs),qhlacs(mgs)/ehls(mgs))
 !      ENDIF
-      IF ( ehls(mgs) .gt. 0.0 ) THEN
+      IF ( ehls(mgs) .gt. 0.0 .and. incwet == 0 ) THEN
         qhlacs(mgs) = Min(qsmxd(mgs),qhlacs0(mgs)) !/ehls(mgs)                   ! divide out the collection efficiency
         chlacs(mgs) = Min(csmxd(mgs),chlacs0(mgs)) !/ehls(mgs)                   ! divide out the collection efficiency
         ehls(mgs) = ehsmax ! 1.0 ! min(ehsfrac*ehs(mgs),ehsmax)            ! modify it
@@ -12091,12 +12153,12 @@
 
         ENDIF
 
-      IF ( efi(mgs) .gt. 0.0 ) THEN
+      IF ( efi(mgs) .gt. 0.0  .and. incwet == 0 ) THEN
         qfaci(mgs) = Min(qimxd(mgs),qfaci0(mgs))  ! effectively sets collection eff to 1
         cfaci(mgs) = Min(cimxd(mgs),cfaci0(mgs))  ! effectively sets collection eff to 1
       ENDIF
 
-      IF ( efs(mgs) .gt. 0.0 ) THEN
+      IF ( efs(mgs) .gt. 0.0 .and. incwet == 0 ) THEN
         qfacs(mgs) = Min(qsmxd(mgs),qfacs0(mgs)) !/efs(mgs)                   ! divide out the collection efficiency
         cfacs(mgs) = Min(csmxd(mgs),cfacs0(mgs)) !/efs(mgs)                   ! divide out the collection efficiency
         efs(mgs) = ehsmax ! 1.0 ! min(ehsfrac*ehs(mgs),ehsmax)            ! modify it
@@ -12528,7 +12590,7 @@
 !      qhlcnh(mgs) = 0.0
 !      chlcnh(mgs) = 0.0
       if ( wetgrowth(mgs) .and. temg(mgs) .lt. tfr-5. .and. qx(mgs,lh) > qxmin(lh) ) then
-      if ( qhacw(mgs).gt.1.e-6 .and. xdn(mgs,lh) > 700. ) then
+      if ( qhacw(mgs).gt.1.e-6 .and. ( xdn(mgs,lh) > 700. .or. lvh == 0 ) ) then
       qhlcnh(mgs) =                                                   &
         ((pi*xdn(mgs,lh)*cx(mgs,lh)) / (6.0*rho0(mgs)*dtp))           &
        *exp(-hldia1/xdia(mgs,lh,1))                                    &
@@ -15313,14 +15375,6 @@
           zhacr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacr(mgs) )
 !          zhacrf(mgs) = g1*zhacr
 
-
-!          z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( (qx(mgs,lh)+dtp*qhacr(mgs))**2)/(cx(mgs,lh))
-
-          IF ( z > zx(mgs,lh) ) THEN
-!            zhacr(mgs) = (z - zx(mgs,lh))*dtpinv
-          ELSE
-!            zhacr(mgs) = 0.0
-          ENDIF
           ENDIF
 
 !        zhacr(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( tmp ) * qhacr(mgs) )
@@ -15331,12 +15385,7 @@
 !     :         ((3.0 + alp)*(2.0 + alp)*(1.0 + alp))
           IF ( qhacw(mgs) .gt. 0.0 ) THEN
 !          zhacw(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacw(mgs) )
-          zhacw(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacw(mgs) )
-
-!          z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( (qx(mgs,lh)+dtp*(qhacw(mgs)-qhmul1(mgs)))**2)/(cx(mgs,lh))
-          IF ( z > zx(mgs,lh) ) THEN
-!            zhacw(mgs) = (z - zx(mgs,lh))*dtpinv
-          ENDIF
+           zhacw(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacw(mgs) )
           ENDIF
 
           ELSE ! } { ! this is not used because of the 'true' above
@@ -19627,3 +19676,22 @@
 !
 !--------------------------------------------------------------------------
 !
+
+      real function  galpha(a_in) 
+      implicit none
+      real :: a_in
+        galpha = ((4. + a_in)*(5. + a_in)*(6. + a_in))/((1. + a_in)*(2. + a_in)*(3. + a_in))
+      end function galpha
+!
+!--------------------------------------------------------------------------
+!
+
+      real function dgalpha(a_in) 
+      real :: a_in
+        dgalpha = (876. + 1260.*a_in + 621.*a_in**2 + 126.*a_in**3 + 9.*a_in**4)/            &
+     &  (36. + 132.*a_in + 193.*a_in**2 + 144.*a_in**3 + 58.*a_in**4 + 12.*a_in**5 + a_in**6)
+      end function dgalpha
+!
+!--------------------------------------------------------------------------
+!
+

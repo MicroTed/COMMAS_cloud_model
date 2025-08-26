@@ -8,7 +8,7 @@
 #else
 
 #include "sam.def.h"
-#define CHGELEC
+! #define CHGELEC
 
 #endif
 

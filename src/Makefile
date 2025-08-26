@@ -113,6 +113,7 @@ MIC_OBJS =  advectrk.o           \
            module_mp_thompson411.o  \
            module_mp_thompson381wof.o  \
            module_mp_morr_two_moment.o \
+           saund.02b.o           \
            module_mp_radar.o
 
 #
@@ -165,7 +166,6 @@ ELEC_OBJS = \
            mud2sp.o              \
            mud3sp.o              \
            mszlight.o            \
-           saund.02b.o           \
            strzsor.o             
 #            mudlight.o            \
 #           spark.ion.2.6.o       \
