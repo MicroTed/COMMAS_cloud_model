@@ -1971,7 +1971,7 @@
           an(igs(mgs),jgs,kgs(mgs),ln(il)) = cx(mgs,il)
         ENDIF
 
-          IF ( zx(mgs,il) > 0.0 .and. cx(mgs,il) <= 0.0 ) THEN
+          IF ( zx(mgs,il) > zxmin .and. cx(mgs,il) <= cxmin ) THEN
 !  have mass and reflectivity but no concentration, so set concentration, using default alpha
             g1 = 36.*(alpha(mgs,lr)+2.0)/((alpha(mgs,lr)+1.0)*pi**2)
             z   = zx(mgs,il)
@@ -1979,6 +1979,15 @@
 
             cx(mgs,il) = g1*dn(igs(mgs),jy,kgs(mgs))**2*(qr)*qr/(z*1000.*1000)
             an(igs(mgs),jgs,kgs(mgs),ln(il)) = cx(mgs,il)
+
+            IF ( cx(mgs,lr) <= cxmin ) THEN
+            ! if resulting concentration is still too small, then zero out
+              zx(mgs,lr) = 0.0
+              qx(mgs,lr) = 0.0
+              an(igs(mgs),jgs,kgs(mgs),lv) = an(igs(mgs),jgs,kgs(mgs),lv) + an(igs(mgs),jgs,kgs(mgs),lr)
+              an(igs(mgs),jgs,kgs(mgs),lr) = qx(mgs,lr)
+              an(igs(mgs),jgs,kgs(mgs),lz(lr)) = zx(mgs,lr)
+            ENDIF
 
            ELSEIF ( zx(mgs,il) <= zxmin .and. cx(mgs,il) > cxmin ) THEN
 !  have mass and concentration but no reflectivity, so set reflectivity, using default alpha
@@ -2196,7 +2205,7 @@
 !          ENDIF
         ENDIF
 
-          IF ( zx(mgs,il) > 0.0 .and. cx(mgs,il) <= 0.0 ) THEN
+          IF ( zx(mgs,il) > 0.0 .and. cx(mgs,il) <= cxmin ) THEN
 !  have mass and reflectivity but no concentration, so set concentration, using default alpha
             g1 = (6.0 + alpha(mgs,il))*(5.0 + alpha(mgs,il))*(4.0 + alpha(mgs,il))/ &
      &            ((3.0 + alpha(mgs,il))*(2.0 + alpha(mgs,il))*(1.0 + alpha(mgs,il)))
@@ -2204,6 +2213,18 @@
             qr  = qx(mgs,il)
             cx(mgs,il) = g1*dn(igs(mgs),jy,kgs(mgs))**2*(6*qr)**2/(z*(pi*xdn(mgs,il))**2)
             an(igs(mgs),jgs,kgs(mgs),ln(il)) = cx(mgs,il)
+
+            IF ( cx(mgs,il) <= cxmin ) THEN
+            ! if resulting number is still too small, then zero out
+              cx(mgs,il) = 0.0
+              zx(mgs,il) = 0.0
+              an(igs(mgs),jgs,kgs(mgs),lv) = an(igs(mgs),jgs,kgs(mgs),lv) + an(igs(mgs),jgs,kgs(mgs),il)
+
+              qx(mgs,il) = 0.0
+              an(igs(mgs),jgs,kgs(mgs),il) = qx(mgs,il)
+              an(igs(mgs),jgs,kgs(mgs),ln(il)) = cx(mgs,il)
+              an(igs(mgs),jgs,kgs(mgs),lz(il)) = zx(mgs,il)
+            ENDIF
 
            ELSEIF ( zx(mgs,il) <= zxmin .and. cx(mgs,il) > cxmin ) THEN
 !  have mass and concentration but no reflectivity, so set reflectivity, using default alpha
@@ -2214,6 +2235,19 @@
 !            zx(mgs,il) = g1*dn(igs(mgs),jy,kgs(mgs))**2*(qr)*qr/chw
             zx(mgs,il) = Min(zxmin*1.1, g1*dn(igs(mgs),jy,kgs(mgs))**2*(6*qr)**2/(chw*(pi*xdn(mgs,il))**2) )
             an(igs(mgs),jgs,kgs(mgs),lz(il)) = zx(mgs,il)
+
+            IF ( zx(mgs,il) <= zxmin ) THEN
+            ! if resulting reflectivity is still too small, then zero out
+              cx(mgs,il) = 0.0
+              zx(mgs,il) = 0.0
+              an(igs(mgs),jgs,kgs(mgs),lv) = an(igs(mgs),jgs,kgs(mgs),lv) + an(igs(mgs),jgs,kgs(mgs),il)
+
+              qx(mgs,il) = 0.0
+              an(igs(mgs),jgs,kgs(mgs),il) = qx(mgs,il)
+              an(igs(mgs),jgs,kgs(mgs),ln(il)) = cx(mgs,il)
+              an(igs(mgs),jgs,kgs(mgs),lz(il)) = zx(mgs,il)
+            ENDIF
+
            ELSEIF ( zx(mgs,il) <= zxmin .and. cx(mgs,il) <= 0.0 ) THEN
 !   How did this happen?
 !              write(91,*) 'ziegfall: something screwy with moments: il = ',il
@@ -2286,7 +2320,6 @@
             g1 = 36.*(6.0 + alpha(mgs,il))*(5.0 + alpha(mgs,il))*(4.0 + alpha(mgs,il))/ &
      &            ((3.0 + alpha(mgs,il))*(2.0 + alpha(mgs,il))*(1.0 + alpha(mgs,il))*pi**2)
             ! zx(mgs,il) = zx(mgs,il) + g1*(rho0(mgs)/xdn(mgs,il))**2*( (qx(mgs,il)/tmp)**2 * (tmp-cx(mgs,il)) )
-            qr  = qx(mgs,il)
             ! check if incoming zx is consistent
             ! Z from incoming cx, qx, and alpha
             tmpz = g1/(pi/6.*xdn(mgs,il))**2 * ((rho0(mgs)*qx(mgs,il))**2)/tmp
@@ -2295,11 +2328,12 @@
               cx(mgs,il) = Max(cx(mgs,il), tmpc)
               ! find cx that gives zx
             ENDIF
-            zx(mgs,il) = g1/(pi/6.*xdn(mgs,il))**2 * ((rho0(mgs)*qr)**2)/cx(mgs,il)
+            zx(mgs,il) = g1/(pi/6.*xdn(mgs,il))**2 * ((rho0(mgs)*qx(mgs,il))**2)/cx(mgs,il)
              an(igs(mgs),jgs,kgs(mgs),lz(il)) = zx(mgs,il)
 
-          chw = cx(mgs,il)
-          z   = zx(mgs,il)
+            qr  = qx(mgs,il)
+            chw = cx(mgs,il)
+            z   = zx(mgs,il)
 
             rd = z*(pi/6.*xdn(mgs,il))**2*chw/((rho0(mgs)*qr)**2)
             alp = (6.0+alpha(mgs,il))*(5.0+alpha(mgs,il))*(4.0+alpha(mgs,il))/   &

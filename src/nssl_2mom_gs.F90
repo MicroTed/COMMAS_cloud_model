@@ -3125,7 +3125,7 @@
           cx(mgs,il) = rho0(mgs)*qx(mgs,il)/(xmas(mgs,il))
         ENDIF
 
-          IF ( zx(mgs,il) > 0.0 .and. cx(mgs,il) <= 0.0 ) THEN
+          IF ( zx(mgs,il) > zxmin .and. cx(mgs,il) <= cxmin ) THEN
 !  have mass and reflectivity but no concentration, so set concentration, using default alpha
             g1 = (6.0 + alpha(mgs,il))*(5.0 + alpha(mgs,il))*(4.0 + alpha(mgs,il))/ &
      &            ((3.0 + alpha(mgs,il))*(2.0 + alpha(mgs,il))*(1.0 + alpha(mgs,il)))
@@ -3133,6 +3133,17 @@
             qr  = qx(mgs,il)
 !            cx(mgs,il) = g1*dn(igs(mgs),jy,kgs(mgs))**2*(qr)*qr/z
             cx(mgs,il) = g1*dn(igs(mgs),jy,kgs(mgs))**2*(6.*qr)**2/(z*(pi*xdn(mgs,il))**2)
+            IF ( cx(mgs,il) < cxmin ) THEN
+            ! if resulting concentration is too small, then zero out
+              cx(mgs,il) = 0.0
+              zx(mgs,il) = 0.0
+              an(igs(mgs),jgs,kgs(mgs),lv) = an(igs(mgs),jgs,kgs(mgs),lv) + an(igs(mgs),jgs,kgs(mgs),il)
+
+              qx(mgs,il) = 0.0
+              an(igs(mgs),jgs,kgs(mgs),il) = qx(mgs,il)
+              an(igs(mgs),jgs,kgs(mgs),ln(il)) = cx(mgs,il)
+              an(igs(mgs),jgs,kgs(mgs),lz(il)) = zx(mgs,il)
+            ENDIF
 
            ELSEIF ( zx(mgs,il) <= zxmin .and. cx(mgs,il) > cxmin ) THEN
 !  have mass and concentration but no reflectivity, so set reflectivity, using default alpha
@@ -3146,6 +3157,18 @@
      &            ((3.0 + alphamax)*(2.0 + alphamax)*(1.0 + alphamax))
             zx(mgs,il) = Max(zxmin*1.1, g1*dn(igs(mgs),jy,kgs(mgs))**2*(6*qr)**2/(chw*(pi*xdn(mgs,il))**2) )
             an(igs(mgs),jgs,kgs(mgs),lz(il)) = zx(mgs,il)
+
+            IF ( zx(mgs,il) <= zxmin ) THEN
+            ! if resulting reflectivity is still too small, then zero out
+              cx(mgs,il) = 0.0
+              zx(mgs,il) = 0.0
+              an(igs(mgs),jgs,kgs(mgs),lv) = an(igs(mgs),jgs,kgs(mgs),lv) + an(igs(mgs),jgs,kgs(mgs),il)
+
+              qx(mgs,il) = 0.0
+              an(igs(mgs),jgs,kgs(mgs),il) = qx(mgs,il)
+              an(igs(mgs),jgs,kgs(mgs),ln(il)) = cx(mgs,il)
+              an(igs(mgs),jgs,kgs(mgs),lz(il)) = zx(mgs,il)
+            ENDIF
 
            ELSEIF ( zx(mgs,il) <= zxmin .and. cx(mgs,il) <= 0.0 ) THEN
 !   How did this happen?
