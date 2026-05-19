@@ -4969,7 +4969,7 @@
 !    write(0,*) 'solver1: qh,nh = ',st(20,20,30,lh),st(20,20,30,lnh)
     CALL TRAJ(nx,ny,nz,ns,dt,gd%xyz3d%flt4d(-ng+1,-ng+1,-ng+1,km%index+1),   &
      &        sbase,u%flt3d,v%flt3d,w%flt3d,t0,fu,fv,piinit%flt1d, &
-     &        pi%flt3d, km%flt3d, dbz%flt3d, elec,  &
+     &        pi%flt3d, km%flt3d, dbz%flt3d, elec, fw,fp,fs,  &
 !     &        pi%flt3d, km%flt3d, &
      &        gxt,gyt,gzt,time,time_real,    &
      &        uinit%flt1d,vinit%flt1d,ugrid,vgrid,microphys,dx,dy)

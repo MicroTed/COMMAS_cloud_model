@@ -17,8 +17,13 @@
                        ! 3 = write trajectories to text files only
   integer :: maxtraj = 0 ! number of trajectories (caculated when itraj >= 1)
   integer :: ntraj   = 0 ! number of trajectories (caculated when itraj >= 1)
-  integer :: ntrajtype = 1 ! 1 for parcel only, 2 to add rain trajectory (kessler or ZVD), 
-                           ! 3 adds graupel+hail (ZVD), 4 adds rain+graupel + hail (ZVD)
+  integer :: ntrajstarttimes = 1 ! number of starting times (trajectory sets)
+  integer :: ntrajtype = 1 ! 1 for parcel only,
+                           ! 2 to add rain trajectory (kessler or ZVD), 
+                           ! 3 adds graupel+hail (ZVD)
+                           ! 4 adds rain+graupel + hail (ZVD)
+                           ! 5 adds graupel-rain weighted Vt
+                           ! 6 adds hail Vt
   integer :: ixtrj1 = 1, ixtrj2 = 1 ! initial region for trajectories (global coordinates!)
   integer :: jytrj1 = 1, jytrj2 = 1
   integer :: kztrj1 = 1, kztrj2 = 1
@@ -27,18 +32,21 @@
   integer :: dztraj = 1
   integer :: time_traj1 = 0
   integer :: time_traj2 = 0
+  integer :: traj_release_interval = 0
+  integer :: traj_last_release_time = 0
   real    :: riserate = 0.0
   integer :: icomtraj = 0 ! flag to tell us if comtraj is being run for a snapshot "frozen storm" sounding
   integer :: iverttraj = 0 ! flag to turn off horizontal motion of the balloon
   character(len=6) :: stimecomtraj
   integer, parameter :: n0 = 1 ! array start
-  integer, parameter :: ninfomax = 76 ! = ieoffset + number of elec vars
+  integer, parameter :: ninfomax = 82 ! = ieoffset + number of elec vars
   integer, parameter :: ieoffset = 48
   integer :: ninfo = ieoffset ! 47
   integer, parameter :: trj_unit = 181
   integer, parameter :: nmicrorates = 5
   integer, parameter :: nelecrates = 14
-  real, allocatable :: trjdat(:,:,:)
+  real, allocatable :: trajstarttimes(:)
+  real, allocatable :: trjdat(:,:,:,:)
   real, allocatable :: microrates(:,:,:,:)
   real, allocatable :: elecrates(:,:,:,:)
   integer :: numflashtraj
@@ -139,6 +147,12 @@
       integer, parameter, private :: lcci    = ieoffset + 26 ! 73 ! ice crystal conc.
       integer, parameter, private :: lccw    = ieoffset + 27 ! 74 ! droplet conc.
       integer, parameter, private :: lcsw    = ieoffset + 28 ! 75 ! snow conc.
+      integer, parameter, private :: ldexdx   = ieoffset + 29 ! 76 !  efield components at end of time step
+      integer, parameter, private :: ldeydy   = ieoffset + 30 ! 77
+      integer, parameter, private :: ldezdz   = ieoffset + 31 ! 78
+      integer, parameter, private :: lrho2    = ieoffset + 32 ! 79
+      integer, parameter, private :: lrho1d   = ieoffset + 33 ! 80
+      integer, parameter, private :: lrho2d   = ieoffset + 34 ! 81
       
       
   
@@ -196,7 +210,7 @@
    character(LEN=1) trjnum
    character(len=2) s1,s2
    integer cmode, status, ncid, dim_id(0:8),dimvals(0:8)
-   integer :: dimids(2), nid, trajnumid,start(1),count(1), record_id, records
+   integer :: dimids(3), nid, trajnumid,trajstartid,start(1),count(1), record_id, records
    integer, allocatable :: trajects(:)
    
    integer :: it,nt
@@ -207,8 +221,10 @@
       integer :: varid
       integer :: start1d(1),count1d(1)
       integer :: start2d(2),count2d(2)
+      integer :: start3d(3),count3d(3)
       real :: data1d(1)
       real, allocatable :: data2d(:,:)
+      real, allocatable :: data3d(:,:,:)
  
    nsteps = (time_traj2 - time_traj1)/dt + 1
    
@@ -304,6 +320,12 @@
    trajvars(lcci )%name = 'CCI' ; trajvars(lcci  )%unit = 'm-3' ; trajvars(lcci  )%descr = 'Ice Xtal concentration'
    trajvars(lccw )%name = 'CCW' ; trajvars(lccw  )%unit = 'm-3' ; trajvars(lccw  )%descr = 'Droplet concentration'
    trajvars(lcsw )%name = 'CSW' ; trajvars(lcsw  )%unit = 'm-3' ; trajvars(lcsw  )%descr = 'Snow concentration'
+   trajvars(ldexdx)%name = 'DEXDX' ; trajvars(ldexdx)%unit = 'V m-2' ; trajvars(ldexdx)%descr = 'dEx/dx'
+   trajvars(ldeydy)%name = 'DEYDY' ; trajvars(ldeydy)%unit = 'V m-2' ; trajvars(ldeydy)%descr = 'dEy/dy'
+   trajvars(ldezdz)%name = 'DEZDZ' ; trajvars(ldezdz)%unit = 'V m-2' ; trajvars(ldezdz)%descr = 'dEz/dz'
+   trajvars(lrho2)%name = 'DIVE3D' ; trajvars(lrho2)%unit = 'nC m-3' ; trajvars(lrho2)%descr = 'SCNET from 3D divergence'
+   trajvars(lrho1d)%name = 'DIVE1D' ; trajvars(lrho1d)%unit = 'nC m-3' ; trajvars(lrho1d)%descr = 'SCNET from 1D divergence'
+   trajvars(lrho2d)%name = 'DIVE2D' ; trajvars(lrho2d)%unit = 'nC m-3' ; trajvars(lrho2d)%descr = 'SCNET from 2D divergence'
 
 
    ixtrj1 = Max(1,ixtrj1)
@@ -335,9 +357,27 @@
      ninfo = ieoffset ! 48
    ENDIF
    
-   allocate( trjdat(n0:ninfo,maxtraj,ntrajtype) ) ! maybe store nsteps at some point?
-   trjdat(:,:,:) = 0.0
-   
+   IF ( traj_release_interval > 0 .and. traj_last_release_time > time_traj1 ) THEN
+     IF ( traj_last_release_time >= time_traj2 ) THEN
+       traj_last_release_time = time_traj2 - traj_release_interval
+     ENDIF
+     ! find the number of start times
+     traj_last_release_time = Min( traj_last_release_time, time_traj2 )
+     ntrajstarttimes = (traj_last_release_time - time_traj1)/traj_release_interval + 1 ! add 1 for 1st release
+     traj_last_release_time = Min( traj_last_release_time, traj_release_interval*ntrajstarttimes )
+   ELSE
+     ntrajstarttimes = 1
+   ENDIF
+
+   allocate( trajstarttimes(ntrajstarttimes) )
+
+   DO i = 1,ntrajstarttimes
+     trajstarttimes(i) = time_traj1 + (i-1)*traj_release_interval
+   ENDDO
+
+   allocate( trjdat(n0:ninfo,maxtraj,ntrajstarttimes,ntrajtype) ) ! maybe store nsteps at some point?
+   trjdat(:,:,:,:) = 0.0
+
    allocate( microrates(-ng+1:nx+ng,-ng+1:ny+ng,-ng+1:nz+ng,nmicrorates) )
    microrates(:,:,:,:) = 0.0
 
@@ -387,6 +427,7 @@
       ! define dimensions for time (unlimited) and number of trajectories (maxtraj)
         
         status     = NF90_DEF_DIM(ncid, 'TRAJECTORY', maxtraj, dim_id(1))
+        status     = NF90_DEF_DIM(ncid, 'START_TIME', ntrajstarttimes, dim_id(2))
 
         IF(status /= NF90_NOERR) print *,'TRAJ_INIT:  Error defining NTRAJ'
         status     = NF90_DEF_DIM(ncid, 'TIME', NF90_UNLIMITED, dim_id(0))
@@ -405,9 +446,15 @@
         status = NF90_PUT_ATT(ncid, nid, "long_name", 'Trajectory number')
         status = NF90_PUT_ATT(ncid, nid, "units",     'count')
 
+        status = NF90_DEF_VAR(ncid, 'START_TIME', NF90_FLOAT, dim_id(2), nid)
+        trajstartid = nid
+        status = NF90_PUT_ATT(ncid, nid, "long_name", 'Trajectory start time')
+        status = NF90_PUT_ATT(ncid, nid, "units",     'seconds')
 
-      dimids(1) = dim_id(1)
-      dimids(2) = dim_id(0)
+
+      dimids(1) = dim_id(2)
+      dimids(2) = dim_id(1)
+      dimids(3) = dim_id(0)
       
     ! define a file variable for each trajectory variable. The dimensions are maxtraj (fixed) and time (unlimited). 
     ! For example, 'X' will have the x position of each trajectory at a given time.
@@ -436,6 +483,9 @@
       count(1) = maxtraj
       status = nf90_put_var(ncid, trajnumid, trajects, start, count )
       
+      start(1) = 1
+      count(1) = ntrajstarttimes
+      status = nf90_put_var(ncid, trajstartid, trajstarttimes, start, count )
       
       status = nf90_close(ncid)
       
@@ -527,7 +577,7 @@
 
         status = nf90_get_var(ncid, trajvars(nt)%varid, data2d, start=start2d, count=count2d )
         IF(status /= NF90_NOERR) THEN 
-          write(0,*) 'NF90_PUT_VAR:  Error writing variable: ', trajvars(nt)%name
+          write(0,*) 'NF90_GET_VAR:  Error writing variable: ', trajvars(nt)%name
           write(0,*) 'start2d = ',start2d(1),start2d(2)
           write(0,*) 'count2d = ',count2d(1),count2d(2)
           write(0,*) 'start2d = ',start2d(1),start2d(2)
@@ -540,7 +590,7 @@
 ! data is probably a good bit faster. It is also easy enough to transpose the arrays after reading them to get into
 ! trajectory space
       DO n = 1,ntraj
-        trjdat(nt,n,it) = data2d(n,1)
+        trjdat(nt,n,:,it) = data2d(n,1)
       ENDDO
       
 !      IF ( my_rank == 0 .and. nt == lxn ) THEN
@@ -577,8 +627,8 @@
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
    SUBROUTINE TRAJ(nx,ny,nz,na,dt,an,ab,u,v,w,t0,t8,t9,pinit,  &
-                     p2,km,dbz,elec,         &
-                     gxt,gyt,gzt,time,time_real,    &
+                     p2,km,dbz,elec,t1,t2,t3,                  &
+                     gxt,gyt,gzt,time,time_real,               &
                      uinit,vinit,ugrid,vgrid,microp,dx,dy)
 
    USE GRID_MODULE, only: variable
@@ -606,6 +656,9 @@
    real    :: v (-ng+1:nx+ng,-ng+1:ny+ng,-ng+1:nz+ng)
    real    :: w (-ng+1:nx+ng,-ng+1:ny+ng,-ng+1:nz+ng)
    real    :: t0(-ng+1:nx+ng,-ng+1:ny+ng,-ng+1:nz+ng)
+   real    :: t1(-ng+1:nx+ng,-ng+1:ny+ng,-ng+1:nz+ng)
+   real    :: t2(-ng+1:nx+ng,-ng+1:ny+ng,-ng+1:nz+ng)
+   real    :: t3(-ng+1:nx+ng,-ng+1:ny+ng,-ng+1:nz+ng)
    real    :: t8(-ng+1:nx+ng,-ng+1:ny+ng,-ng+1:nz+ng)
    real    :: t9(-ng+1:nx+ng,-ng+1:ny+ng,-ng+1:nz+ng)
    real    :: gxt(-ng+1:nx+ng,4), gyt(-ng+1:ny+ng,4), gzt(-ng+1:nz+ng,4)
@@ -622,7 +675,7 @@
 
    TYPE(VARIABLE)  :: elec(neelec)
    
-   integer :: n,nt
+   integer :: n,nt,nst,numstart
    integer :: i,j,k
    real    :: wtot, u1, v1
    logical :: work_to_do
@@ -663,7 +716,7 @@
 
 !   integer,allocatable :: loc(3,maxtraj)
    real,allocatable,save :: trjbuf(:,:)
-   real,allocatable,save :: trjloc(:,:)
+   real,allocatable,save :: trjloc(:,:,:)
 
 
       
@@ -712,8 +765,10 @@
       integer :: ncid, varid, status
       integer :: start1d(1),count1d(1)
       integer :: start2d(2),count2d(2)
+      integer :: start3d(3),count3d(3)
       real :: data1d(1)
       real, allocatable,save :: data2d(:,:)
+      real, allocatable,save :: data3d(:,:,:)
       
       double precision :: term,term3,term4,term5
 
@@ -725,6 +780,7 @@
       real crbin(nbin),chbin(nbin,2),chlbin(nbin),cibin(ntakid,ntakit)
       double precision :: totn, totvt, totq, totz
       integer, save :: lf75,lf500,lf150
+      real :: tmp,vtmp
 
 
 !-----------------------------------------------------------------------------
@@ -762,6 +818,7 @@
       IF ( lvi .gt. 1 ) lvol(li) = lvi
       IF ( lvs .gt. 1 ) lvol(ls) = lvs
       IF ( lvh .gt. 1 ) lvol(lh) = lvh
+      IF ( lvf .gt. 1 ) lvol(lf) = lvf
       IF ( lhl .gt. 1 .and. lvhl .gt. 1 ) lvol(lhl) = lvhl
       
       
@@ -779,6 +836,7 @@
       ln(ls) = lns
       ln(lh) = lnh
       ENDIF
+      IF ( lf .gt. 1 ) ln(lf) = lnf
       IF ( lhl .gt. 1 ) ln(lhl) = lnhl
 
       lzx(:) = 0
@@ -788,11 +846,13 @@
       lzx(ls) = lzs
       lzx(lh) = lzh
       ENDIF
+      IF ( lf .gt. 1 .and. lzf > 1 ) lzx(lf) = lzf
       IF ( lhl .gt. 1 .and. lzhl > 1 ) lzx(lhl) = lzhl
 
       lliq(:) = 0
       IF ( lsw .gt. 1 ) lliq(ls) = lsw
       IF ( lhw .gt. 1 ) lliq(lh) = lhw
+      IF ( lf .gt. 1 .and. lfw .gt. 1 ) lliq(lf) = lfw
       IF ( lhl .gt. 1 .and. lhlw .gt. 1 ) lliq(lhl) = lhlw
 
       ldoliq = .false.
@@ -814,6 +874,11 @@
       xvmx(ls) = xvsmx0
       xvmx(lh) = xvhmx0
       
+      IF ( lf .gt. 1 ) THEN
+      xvmn(lf) = xvhmn0
+      xvmx(lf) = xvhmx0
+      ENDIF
+
       IF ( lhl .gt. 1 ) THEN
       xvmn(lhl) = xvhlmn0
       xvmx(lhl) = xvhlmx0
@@ -831,6 +896,7 @@
       xdnmx(ls) =  300.0
       xdnmx(lh) =  900.0
       IF ( lhl .gt. 1 ) xdnmx(lhl) = 900.0
+      IF ( lf .gt. 1 ) xdnmx(lf) = 900.0
 !
       xdnmn(:) = 900.0
       
@@ -839,6 +905,7 @@
       xdnmn(li) =  100.0
       xdnmn(ls) =  100.0
       xdnmn(lh) =  170.0
+      IF ( lf .gt. 1 ) xdnmn(lf) = 170.0
       IF ( lhl .gt. 1 ) xdnmn(lhl) = 500.0
 
       xdn0(:) = 900.0
@@ -848,6 +915,7 @@
       xdn0(lr) = 1000.0
       xdn0(ls) = rho_qs ! 100.0
       xdn0(lh) = rho_qh ! (0.5)*(xdnmn(lh)+xdnmx(lh))
+      IF ( lf .gt. 1 ) xdn0(lf) = rho_qhl ! 800.0
       IF ( lhl .gt. 1 ) xdn0(lhl) = rho_qhl ! 800.0
 
 !
@@ -858,6 +926,7 @@
       cdx(lh) = 0.8 ! 1.0 ! 0.45
       cdx(ls) = 2.00
 !      cd(1) = cdx(ls)
+      IF ( lf .gt. 1 ) cdx(lf) = 0.8
       IF ( lhl .gt. 1 ) cdx(lhl) = 0.45
 
 !      cwmasn = 5.23e-13   ! minimum mass, defined by radius of 5.0e-6
@@ -913,7 +982,8 @@
       ENDIF
       
 
-   
+      nst = 1 ! set number of times to 1 for initial testing
+      numstart = ntrajstarttimes
 
       if ( initflag == 0 ) then
       initflag = 1
@@ -930,12 +1000,12 @@
         CALL COMMASMPI_ABORT()
        ENDIF
       IF ( .not. trajrestart ) THEN
-      trjdat(lx,in,1:ntrajtype) = (ix-1)*dx + 0.5*dx
-      trjdat(ly,in,1:ntrajtype) = (jy-1)*dy + 0.5*dy
-      trjdat(lz,in,1:ntrajtype) = gzt(kz,1)
-      trjdat(lxn,in,1:ntrajtype) = (ix-1)*dx + 0.5*dx
-      trjdat(lyn,in,1:ntrajtype) = (jy-1)*dy + 0.5*dy
-      trjdat(lzn,in,1:ntrajtype) = gzt(kz,1)
+      trjdat(lx,in,1:numstart,1:ntrajtype) = (ix-1)*dx + 0.5*dx ! need to replace with gxt etc.
+      trjdat(ly,in,1:numstart,1:ntrajtype) = (jy-1)*dy + 0.5*dy
+      trjdat(lz,in,1:numstart,1:ntrajtype) = gzt(kz,1)
+      trjdat(lxn,in,1:numstart,1:ntrajtype) = (ix-1)*dx + 0.5*dx
+      trjdat(lyn,in,1:numstart,1:ntrajtype) = (jy-1)*dy + 0.5*dy
+      trjdat(lzn,in,1:numstart,1:ntrajtype) = gzt(kz,1)
 !       IF ( idebug > 0 ) THEN
 !        write(0,*) 'in,x,y,z = ',in,(ix-1)*dx + 0.5*dx,(jy-1)*dy + 0.5*dx,gzt(kz,1)
 !       ENDIF
@@ -959,25 +1029,28 @@
         ENDIF
         
         IF ( .not. allocated( trjbuf ) ) THEN
-          allocate( trjbuf(n0:ninfo+2,ntraj*ntrajtype) )
-          allocate( trjloc(3,ntraj*ntrajtype) )
+          allocate( trjbuf(n0:ninfo+3,ntraj*ntrajtype*numstart) )
+          allocate( trjloc(3,ntraj*ntrajtype,numstart) )
           allocate( data2d(maxtraj,1) )
+          allocate( data3d(1,maxtraj,1) )
         ENDIF
       
       ELSE
         ! transfer future values to current values
         DO it = 1,ntrajtype
+        DO nst = 1,numstart
         DO n = 1,ntraj
-          trjdat(lx,n,it) = trjdat(lxn,n,it)
-          trjdat(ly,n,it) = trjdat(lyn,n,it)
-          trjdat(lz,n,it) = trjdat(lzn,n,it)
+          trjdat(lx,n,nst,it) = trjdat(lxn,n,nst,it)
+          trjdat(ly,n,nst,it) = trjdat(lyn,n,nst,it)
+          trjdat(lz,n,nst,it) = trjdat(lzn,n,nst,it)
 
-          trjdat(lqt:lx-1,n,it) = 0 ! reset other values
-          trjdat(lfrz:lxn-1,n,it) = 0 ! reset other values
-          IF ( ninfo > lzn ) trjdat(lzn+1:ninfo,n,it) = 0 ! reset other values
+          trjdat(lqt:lx-1,n,nst,it) = 0 ! reset other values
+          trjdat(lfrz:lxn-1,n,nst,it) = 0 ! reset other values
+          IF ( ninfo > lzn ) trjdat(lzn+1:ninfo,n,nst,it) = 0 ! reset other values
           
 !          trjdat(1:lx-1,n,it) = 0 ! reset other values
 !          trjdat(lz+1:ninfo-3,n,it) = 0 ! reset other values
+        ENDDO
         ENDDO
         ENDDO
       
@@ -1018,6 +1091,9 @@
                        + an(ix,jy,kz,ls)+an(ix,jy,kz,lh) +                    &
                          an(ix,jy,kz-1,lc)+an(ix,jy,kz-1,lr)+an(ix,jy,kz-1,li) &
                        + an(ix,jy,kz-1,ls)+an(ix,jy,kz-1,lh) )
+               IF ( lf > 1 ) THEN 
+                 qsum = qsum + 0.5*(an(ix,jy,kz,lf)+ an(ix,jy,kz-1,lf) )
+               ENDIF
                IF ( lhl > 1 ) THEN 
                  qsum = qsum + 0.5*(an(ix,jy,kz,lhl)+ an(ix,jy,kz-1,lhl) )
                ENDIF
@@ -1216,6 +1292,9 @@
 #endif
 
     t0(:,:,:) = 0.0
+    t1(:,:,:) = 0.0 ! dEx/dx
+    t2(:,:,:) = 0.0 ! dEy/dy
+    t3(:,:,:) = 0.0 ! dEz/dz
 !    loc(:,:) = 0
 
 !      facz = (z - gzt(kc,1))*gzt(kc,3)
@@ -1230,6 +1309,10 @@
       DO j = 1,ny
       DO i = 1,nx
       
+         t1(i,j,k) = (elec(iex)%flt3d(i+1,j,k) - elec(iex)%flt3d(i,j,k) )*gxt(i,4)
+         t2(i,j,k) = (elec(iey)%flt3d(i,j+1,k) - elec(iey)%flt3d(i,j,k) )*gyt(j,4)
+         t3(i,j,k) = (elec(iez)%flt3d(i,j,k+1) - elec(iez)%flt3d(i,j,k) )*gzt(k,4)
+         
          x1 = Max( -ng, i-chgavex )
          x2 = Min( nx+ng, i+chgavex )
          y1 = Max( -ng, j-chgavex )
@@ -1311,7 +1394,102 @@
      &      d_proc(my_rank),u_proc(my_rank),upward_tag,t0)
 
        ENDIF
+
+       IF ( nproci > 1 ) THEN
+       westward_tag = 10001
+       CALL sendrecv_westward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      w_proc(my_rank),e_proc(my_rank),westward_tag,t1 )
+
+       eastward_tag = 10002
+       CALL sendrecv_eastward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      w_proc(my_rank),e_proc(my_rank),eastward_tag,t1)
+       ENDIF
+       
+       IF ( nprocj > 1 ) THEN
+       southward_tag = 10003
+       CALL sendrecv_southward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      n_proc(my_rank),s_proc(my_rank),southward_tag,t1)
+
+       northward_tag = 10044
+       CALL sendrecv_northward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      n_proc(my_rank),s_proc(my_rank),northward_tag,t1)
+       ENDIF
+
+       IF ( nprock > 1 ) THEN
+       
+       downward_tag = 10005
+       CALL sendrecv_downward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      d_proc(my_rank),u_proc(my_rank),downward_tag,t1)
+
+       upward_tag = 10006
+       CALL sendrecv_upward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      d_proc(my_rank),u_proc(my_rank),upward_tag,t1)
+
+       ENDIF
       
+       IF ( nproci > 1 ) THEN
+       westward_tag = 10001
+       CALL sendrecv_westward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      w_proc(my_rank),e_proc(my_rank),westward_tag,t2 )
+
+       eastward_tag = 10002
+       CALL sendrecv_eastward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      w_proc(my_rank),e_proc(my_rank),eastward_tag,t2)
+       ENDIF
+       
+       IF ( nprocj > 1 ) THEN
+       southward_tag = 10003
+       CALL sendrecv_southward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      n_proc(my_rank),s_proc(my_rank),southward_tag,t2)
+
+       northward_tag = 10044
+       CALL sendrecv_northward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      n_proc(my_rank),s_proc(my_rank),northward_tag,t2)
+       ENDIF
+
+       IF ( nprock > 1 ) THEN
+       
+       downward_tag = 10005
+       CALL sendrecv_downward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      d_proc(my_rank),u_proc(my_rank),downward_tag,t2)
+
+       upward_tag = 10006
+       CALL sendrecv_upward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      d_proc(my_rank),u_proc(my_rank),upward_tag,t2)
+
+       ENDIF
+
+       IF ( nproci > 1 ) THEN
+       westward_tag = 10001
+       CALL sendrecv_westward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      w_proc(my_rank),e_proc(my_rank),westward_tag,t3 )
+
+       eastward_tag = 10002
+       CALL sendrecv_eastward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      w_proc(my_rank),e_proc(my_rank),eastward_tag,t3)
+       ENDIF
+       
+       IF ( nprocj > 1 ) THEN
+       southward_tag = 10003
+       CALL sendrecv_southward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      n_proc(my_rank),s_proc(my_rank),southward_tag,t3)
+
+       northward_tag = 10044
+       CALL sendrecv_northward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      n_proc(my_rank),s_proc(my_rank),northward_tag,t3)
+       ENDIF
+
+       IF ( nprock > 1 ) THEN
+       
+       downward_tag = 10005
+       CALL sendrecv_downward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      d_proc(my_rank),u_proc(my_rank),downward_tag,t3)
+
+       upward_tag = 10006
+       CALL sendrecv_upward(nx,ny,nz,ng,ng,ng,nb,nampi,   & 
+     &      d_proc(my_rank),u_proc(my_rank),upward_tag,t3)
+
+       ENDIF
       
       ENDIF
 #endif
@@ -1331,12 +1509,13 @@
 !     write(*,*) 'ixbeg,ixend,nxend = ',ixbeg,ixend,nxend
      
      DO it = 1,ntrajtype
+     DO nst = 1,numstart
      DO n = 1,ntraj
     ! check if parcel is in this tile
     ! Use the SCALAR points because we do not go 'left' of ic = 1
-      lcheck = ( trjdat(lx,n,it) >= gxt(1,1) .and. trjdat(lx,n,it) < gxt(ixe,1) ) .and. &
-               ( trjdat(ly,n,it) >= gyt(1,1) .and. trjdat(ly,n,it) < gyt(jye,1) ) .and. &
-               ( trjdat(lz,n,it) >= gzt(1,1) .and. trjdat(lz,n,it) < gzt(kze,1) )
+      lcheck = ( trjdat(lx,n,nst,it) >= gxt(1,1) .and. trjdat(lx,n,nst,it) < gxt(ixe,1) ) .and. &
+               ( trjdat(ly,n,nst,it) >= gyt(1,1) .and. trjdat(ly,n,nst,it) < gyt(jye,1) ) .and. &
+               ( trjdat(lz,n,nst,it) >= gzt(1,1) .and. trjdat(lz,n,nst,it) < gzt(kze,1) )
       IF ( lcheck ) THEN
        ntraj_tile = ntraj_tile + 1
       ELSE
@@ -1357,9 +1536,9 @@
 !  find lower left corner of scalar grid cell that trajectory
 !  end point is currently in for interpolation of scalars
 !
-      x = trjdat(lx,n,it)
-      y = trjdat(ly,n,it)
-      z = trjdat(lz,n,it)
+      x = trjdat(lx,n,nst,it)
+      y = trjdat(ly,n,nst,it)
+      z = trjdat(lz,n,nst,it)
 
       ic = ifix((x+eps)/dx + 0.5) - ixbeg + 1
       jc = ifix((y+eps)/dy + 0.5) - jybeg + 1
@@ -1414,91 +1593,91 @@
       (idebug, microrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nmicrorates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
        
-       trjdat(lfrz,n,it) = Max(0.0,dumint)
-       trjdat(lmlt,n,it) = Min(0.0,dumint)
+       trjdat(lfrz,n,nst,it) = Max(0.0,dumint)
+       trjdat(lmlt,n,nst,it) = Min(0.0,dumint)
        
        IF (  idebug .ge. 1 .and. Abs(dumint) > 0.0 ) THEN
-        write(0,*) 'TRAJ: n,lfrz = ',time_real,n,dumint,trjdat(lfrz,n,it),trjdat(lmlt,n,it)
+        write(0,*) 'TRAJ: n,lfrz = ',time_real,n,dumint,trjdat(lfrz,n,nst,it),trjdat(lmlt,n,nst,it)
        ENDIF
 
       call mlint2  &
       (idebug, microrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nmicrorates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 2)
        
-       trjdat(ldep,n,it) = Max(0.0,dumint)
-       trjdat(lsub,n,it) = Min(0.0,dumint)
+       trjdat(ldep,n,nst,it) = Max(0.0,dumint)
+       trjdat(lsub,n,nst,it) = Min(0.0,dumint)
 
 
        IF ( idebug .ge. 1 .and. Abs(dumint) > 0.0 ) THEN
-        write(0,*) 'TRAJ: n,ldep = ',time_real,n,dumint,trjdat(ldep,n,it),trjdat(lsub,n,it)
+        write(0,*) 'TRAJ: n,ldep = ',time_real,n,dumint,trjdat(ldep,n,nst,it),trjdat(lsub,n,nst,it)
        ENDIF
 
       call mlint2  &
       (idebug, microrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nmicrorates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 3)
        
-       trjdat(lcnd,n,it) = Max(0.0,dumint)
-       trjdat(levp,n,it) = Min(0.0,dumint)
+       trjdat(lcnd,n,nst,it) = Max(0.0,dumint)
+       trjdat(levp,n,nst,it) = Min(0.0,dumint)
 
        IF ( idebug .ge. 1 .and. Abs(dumint) > 0.0 ) THEN
-        write(0,*) 'TRAJ: n,lcnd = ',time_real,n,dumint,trjdat(lcnd,n,it),trjdat(levp,n,it)
+        write(0,*) 'TRAJ: n,lcnd = ',time_real,n,dumint,trjdat(lcnd,n,nst,it),trjdat(levp,n,nst,it)
        ENDIF
 
       call mlint2  &
       (idebug, microrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nmicrorates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 4)
        
-       trjdat(lrevp,n,it) = dumint
+       trjdat(lrevp,n,nst,it) = dumint
 
       call mlint2  &
       (idebug, microrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nmicrorates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 5)
        
-       trjdat(lgmlt,n,it) = dumint
+       trjdat(lgmlt,n,nst,it) = dumint
 
       call mlint2  &
       (idebug, t8,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
        
-       trjdat(lbuoy,n,it) = dumint
+       trjdat(lbuoy,n,nst,it) = dumint
 
       call mlint2  &
       (idebug, t9,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
        
-       trjdat(lpgrd,n,it) = dumint
+       trjdat(lpgrd,n,nst,it) = dumint
 
       call mlint2  &
       (idebug, pn,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
        
-       trjdat(lpp,n,it) = dumint
+       trjdat(lpp,n,nst,it) = dumint
 
       call mlint2  &
       (idebug, pb,   1, 1, 1, 1, -ng+1, nz+ng, &
        1, 1, 1, 1, nz, dumint, facx, facy, facz, 1, 1, kc, 1)
        
-       trjdat(lp,n,it) = dumint
+       trjdat(lp,n,nst,it) = dumint
 
       call mlint2  &
       (idebug, an,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, na, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, lt)
 
-       trjdat(ltt,n,it) = dumint
+       trjdat(ltt,n,nst,it) = dumint
 
-       trjdat(lres,n,it) = trjdat(ltt,n,it)*(1.e-5*(trjdat(lp,n,it) + trjdat(lpp,n,it)))**rcp
+       trjdat(lres,n,nst,it) = trjdat(ltt,n,nst,it)*(1.e-5*(trjdat(lp,n,nst,it) + trjdat(lpp,n,nst,it)))**rcp
 
       call mlint2  &
       (idebug, km,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
        
-       trjdat(let,n,it) = dumint
+       trjdat(let,n,nst,it) = dumint
 
       call mlint2  &
       (idebug, dbz,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
        
-       trjdat(lztot,n,it) = dumint
+       trjdat(lztot,n,nst,it) = dumint
 
       qx(1,:) = 0.0
       DO il = lv,lhab
@@ -1507,13 +1686,14 @@
        1, na, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, il)
        
        qx(1,il) = dumint
-       IF ( il == lv) trjdat(lqt,n,it) = dumint
-       IF ( lc > 1 .and. il == lc ) trjdat(lct,n,it) = dumint
-       IF ( lr > 1 .and. il == lr ) trjdat(lrt,n,it) = dumint
-       IF ( li > 1 .and. il == li ) trjdat(lit,n,it) = dumint
-       IF ( ls > 1 .and. il == ls ) trjdat(lst,n,it) = dumint
-       IF ( lh > 1 .and. il == lh ) trjdat(lgt,n,it) = dumint
-       IF ( lhl > 1 .and. il == lhl ) trjdat(lht,n,it) = dumint
+       IF ( il == lv) trjdat(lqt,n,nst,it) = dumint
+       IF ( lc > 1 .and. il == lc ) trjdat(lct,n,nst,it) = dumint
+       IF ( lr > 1 .and. il == lr ) trjdat(lrt,n,nst,it) = dumint
+       IF ( li > 1 .and. il == li ) trjdat(lit,n,nst,it) = dumint
+       IF ( ls > 1 .and. il == ls ) trjdat(lst,n,nst,it) = dumint
+       IF ( lh > 1 .and. il == lh ) trjdat(lgt,n,nst,it) = dumint
+       IF ( lf > 1 .and. lh > 1 .and. il == lf ) trjdat(lgt,n,nst,it) = trjdat(lgt,n,nst,it) + dumint
+       IF ( lhl > 1 .and. il == lhl ) trjdat(lht,n,nst,it) = dumint
 !       IF ( lh > 1 ) qx(1,lh) = dumint
 !       IF ( lhl > 1 ) qx(1,lhl) = dumint     
       ENDDO
@@ -1522,14 +1702,14 @@
         call mlint2  &
          (idebug, an,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
           1, na, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, lnox)
-        trjdat(lnoxt,n,it) = dumint
+        trjdat(lnoxt,n,nst,it) = dumint
       ENDIF
 
 !      IF ( lco > 1 ) THEN
 !        call mlint2  &
 !         (idebug, an,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
 !          1, na, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, lco)
-!        trjdat(lcot,n,it) = dumint
+!        trjdat(lcot,n,nst,it) = dumint
 !      ENDIF
 
 
@@ -1543,7 +1723,7 @@
        1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
        
        rho0(1) = dumint
-       trjdat(ldn,n,it) = dumint
+       trjdat(ldn,n,nst,it) = dumint
           IF ( .not. ( rho0(1) > 0.00001 .and. rho0(1) < 2. )) THEN
             write(0,*) 'TRAJ: problem with rho0: ',rho0(1),ic,jc,kc,my_rank
             write(0,*) 'dn at corners: ',dn(ic,jc,kc),dn(ic+1,jc,kc),dn(ic,jc+1,kc),dn(ic,jc,kc+1), &
@@ -1551,18 +1731,18 @@
             call commasmpi_abort()
           ENDIF
        rhovt(1) = Sqrt(1.225/rho0(1))
-       temcg(1) = trjdat(ltt,n,it) - 273.15
+       temcg(1) = trjdat(ltt,n,nst,it) - 273.15
 
 
 ! fill temp arrays to calculate fall speeds for ZVD scheme, if needed
       IF ( it >= 1 .and. microp(1:1) == 'Z' ) THEN
-!       qx(1,lv) = trjdat(lqt,n,it)
-!       qx(1,lc) = trjdat(lct,n,it)
-!       qx(1,lr) = trjdat(lrt,n,it)
-!       qx(1,li) = trjdat(lit,n,it)
-!       qx(1,ls) = trjdat(lst,n,it)
-!       qx(1,lh) = trjdat(lgt,n,it)
-!       IF ( lhl > 1 ) qx(1,lhl) = trjdat(lqt,n,it)
+!       qx(1,lv) = trjdat(lqt,n,nst,it)
+!       qx(1,lc) = trjdat(lct,n,nst,it)
+!       qx(1,lr) = trjdat(lrt,n,nst,it)
+!       qx(1,li) = trjdat(lit,n,nst,it)
+!       qx(1,ls) = trjdat(lst,n,nst,it)
+!       qx(1,lh) = trjdat(lgt,n,nst,it)
+!       IF ( lhl > 1 ) qx(1,lhl) = trjdat(lqt,n,nst,it)
        
        cwnccn(1) = ccn
        kgs(1) = 1
@@ -1618,6 +1798,7 @@
         IF ( li .gt. 1 )  xdn(mgs,li) = xdn0(li)
         IF ( ls .gt. 1 )  xdn(mgs,ls) = xdn0(ls)
         IF ( lh .gt. 1 )  xdn(mgs,lh) = xdn0(lh)
+        IF ( lf .gt. 1 )  xdn(mgs,lf) = xdn0(lf)
         IF ( lhl .gt. 1 ) xdn(mgs,lhl) = xdn0(lhl)
       end do
        
@@ -1695,15 +1876,15 @@
       ENDDO
       
       IF ( lzr > 1 ) THEN
-        trjdat(lzrt,n,it) = Max(-100., 10*Log10(Max(1.e-10, 1.0e18*zx(1,lr) ) ) ) 
+        trjdat(lzrt,n,nst,it) = Max(-100., 10*Log10(Max(1.e-10, 1.0e18*zx(1,lr) ) ) ) 
       ENDIF
 
       IF ( lzh > 1 ) THEN
-        trjdat(lzht,n,it) = Max(-100., 10*Log10(Max(1.e-10, 1.0e18*0.224*zx(1,lh) ) ) ) 
+        trjdat(lzht,n,nst,it) = Max(-100., 10*Log10(Max(1.e-10, 1.0e18*0.224*zx(1,lh) ) ) ) 
       ENDIF
 
       IF ( lzhl > 1 .and. lhl > 1) THEN
-        trjdat(lzhlt,n,it) = Max(-100., 10*Log10(Max(1.e-10, 1.0e18*0.224*zx(1,lhl) ) ) ) 
+        trjdat(lzhlt,n,nst,it) = Max(-100., 10*Log10(Max(1.e-10, 1.0e18*0.224*zx(1,lhl) ) ) ) 
       ENDIF
       
       ENDIF ! ipconc >= 6
@@ -1760,8 +1941,8 @@
          qx(1,lr) = 1.e6*totq/rho0(1)
          cx(1,lr) = 1.e6*totn
          zx(1,lr) = 1.d6*totz
-         trjdat(lzrt,n,it) = Max(-100., 10*Log10(Max(1.e-20, zx(1,lr) ) ) ) 
-         trjdat(lrt,n,it) = qx(1,lr)
+         trjdat(lzrt,n,nst,it) = Max(-100., 10*Log10(Max(1.e-20, zx(1,lr) ) ) ) 
+         trjdat(lrt,n,nst,it) = qx(1,lr)
          IF ( totq > 1.e-20 ) THEN
           vtxbar(1,lr,1) = 0.01*totvt/totq*rhovt(1)
          ELSE
@@ -1784,7 +1965,7 @@
         ENDDO
          qx(1,lc) = 1.e6*totq/rho0(1)
          cx(1,lc) = 1.e6*totn
-         trjdat(lct,n,it) = qx(1,lc)
+         trjdat(lct,n,nst,it) = qx(1,lc)
 
    ! graupel vt
           kf = 1
@@ -1813,8 +1994,8 @@
          qx(1,lh) = 1.e6*totq/rho0(1)
          cx(1,lh) = 1.e6*totn
          zx(1,lh) = 0.224*1.d6*totz
-         trjdat(lzht,n,it) = Max(-100., 10*Log10(Max(1.e-20, zx(1,lh) ) ) ) 
-         trjdat(lgt,n,it) = qx(1,lh)
+         trjdat(lzht,n,nst,it) = Max(-100., 10*Log10(Max(1.e-20, zx(1,lh) ) ) ) 
+         trjdat(lgt,n,nst,it) = qx(1,lh)
          IF ( totq > 1.e-20 ) THEN
           vtxbar(1,lh,1) = 0.01*totvt/totq*rhovt(1)
          ELSE
@@ -1858,9 +2039,9 @@
      &      dn(ic+1,jc+1,kc),dn(ic+1,jc,kc+1),dn(ic,jc+1,kc+1),dn(ic+1,jc+1,kc+1)
             call commasmpi_abort()
           ENDIF
-         trjdat(lht,n,it) = qx(1,lhl)
+         trjdat(lht,n,nst,it) = qx(1,lhl)
          zx(1,lhl) = 0.224*1.d6*totz
-         trjdat(lzhlt,n,it) = Max(-100., 10*Log10(Max(1.e-20, zx(1,lhl) ) ) ) 
+         trjdat(lzhlt,n,nst,it) = Max(-100., 10*Log10(Max(1.e-20, zx(1,lhl) ) ) ) 
 !         write(0,*) 'TRAJ: Tak hl qx,cx,totq = ',qx(1,lhl),cx(1,lhl),totq,rho0(1)
          IF ( totq > 1.e-20 ) THEN
           vtxbar(1,lhl,1) = 0.01*totvt/totq*rhovt(1)
@@ -1868,8 +2049,8 @@
           vtxbar(1,lhl,1) = 0.0
          ENDIF
 
-!           trjdat(lit,n,it) = 0.0
-           trjdat(lst,n,it) = 0.0
+!           trjdat(lit,n,nst,it) = 0.0
+           trjdat(lst,n,nst,it) = 0.0
 
   ! put small graupel and frozen drops into snow
           totn = 0.0
@@ -1889,7 +2070,7 @@
         ENDDO
          qx(1,ls) = 1.e6*totq/rho0(1)
          cx(1,ls) = 1.e6*totn
-         trjdat(lst,n,it) = qx(1,ls)
+         trjdat(lst,n,nst,it) = qx(1,ls)
 
       
       ENDIF
@@ -1917,7 +2098,7 @@
        1, 1, nx, ny, nz, uint, facxu, facyu, faczu, iu,ju,ku, 1)
 
       
-      trjdat(lut,n,it) = uint
+      trjdat(lut,n,nst,it) = uint
       
       IF ( idebug .ge. 1 ) write(6,*) 'iu,ju,ku = ',iu,ju,ku,facxu,facyu,faczu,uint
 
@@ -1929,9 +2110,33 @@
       (idebug, elec(iex)%flt3d,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, dumint, facxu, facyu, faczu,iu,ju,ku, 1)
        
-       trjdat(lex,n,it) = dumint
+       trjdat(lex,n,nst,it) = dumint
        exint = dumint
       
+        ! d/dx(Ex)
+         call mlint2  &
+         (idebug, t1,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
+          1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
+
+          trjdat(ldexdx,n,nst,it) = dumint
+
+        ! d/dy(Ey)
+         call mlint2  &
+         (idebug, t2,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
+          1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
+
+          trjdat(ldeydy,n,nst,it) = dumint
+
+        ! d/dz(Ez)
+         call mlint2  &
+         (idebug, t3,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
+          1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
+
+          trjdat(ldezdz,n,nst,it) = dumint
+          
+          trjdat(lrho2,n,nst,it) = 1.e9*8.8592e-12*(trjdat(ldexdx,n,nst,it) + trjdat(ldeydy,n,nst,it) + trjdat(ldezdz,n,nst,it))
+          trjdat(lrho1d,n,nst,it) = 1.e9*8.8592e-12*(trjdat(ldezdz,n,nst,it))
+          trjdat(lrho2d,n,nst,it) = 1.e9*8.8592e-12*(trjdat(ldexdx,n,nst,it) + trjdat(ldeydy,n,nst,it))
 
       ! Ex-pre lightning
       IF ( icomtraj == 0 ) THEN
@@ -1939,9 +2144,9 @@
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facxu, facyu, faczu,iu,ju,ku, 1)
        
-       trjdat(lexpl,n,it) = dumint
+       trjdat(lexpl,n,nst,it) = dumint
       ELSE
-       trjdat(lexpl,n,it) = trjdat(lex,n,it)
+       trjdat(lexpl,n,nst,it) = trjdat(lex,n,nst,it)
       ENDIF
       
       
@@ -1950,7 +2155,7 @@
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facxu, facyu, faczu,iu,ju,ku, 5)
        
-       trjdat(ldelex,n,it) = dumint
+       trjdat(ldelex,n,nst,it) = dumint
       
       ENDIF
    
@@ -1976,7 +2181,7 @@
       (idebug, v,  -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, vint, facxv, facyv, faczv, iv,jv,kv, 1)
       
-      trjdat(lvt,n,it) = vint
+      trjdat(lvt,n,nst,it) = vint
 
       IF ( idebug .ge. 1 ) write(6,*) 'iv,jv,kv = ',iv,jv,kv,facxv,facyv,faczv,vint
 
@@ -1988,7 +2193,7 @@
       (idebug, elec(iey)%flt3d,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, dumint, facxv, facyv, faczv,iv,jv,kv, 1)
        
-       trjdat(ley,n,it) = dumint
+       trjdat(ley,n,nst,it) = dumint
        eyint = dumint
       
       ! Ey-prelightning
@@ -1997,9 +2202,9 @@
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facxv, facyv, faczv,iv,jv,kv, 2)
        
-       trjdat(leypl,n,it) = dumint
+       trjdat(leypl,n,nst,it) = dumint
       ELSE
-       trjdat(leypl,n,it) = trjdat(ley,n,it)
+       trjdat(leypl,n,nst,it) = trjdat(ley,n,nst,it)
       ENDIF
 
 
@@ -2008,7 +2213,7 @@
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facxv, facyv, faczv,iv,jv,kv, 6)
        
-       trjdat(ldeley,n,it) = dumint
+       trjdat(ldeley,n,nst,it) = dumint
       
       ENDIF
       
@@ -2036,9 +2241,9 @@
       (idebug, elec(iez)%flt3d,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, dumint, facxw, facyw, faczw,iw,jw,kw, 1)
        
-       trjdat(lez,n,it) = dumint
+       trjdat(lez,n,nst,it) = dumint
        ezint = dumint
-       trjdat(lemag,n,it) = ( exint**2 + eyint**2 + ezint**2 )**0.50
+       trjdat(lemag,n,nst,it) = ( exint**2 + eyint**2 + ezint**2 )**0.50
       
 
       ! Ez pre-lightning
@@ -2047,19 +2252,19 @@
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facxw, facyw, faczw,iw,jw,kw, 3)
        
-       trjdat(lezpl,n,it) = dumint
+       trjdat(lezpl,n,nst,it) = dumint
       ELSE
-       trjdat(lezpl,n,it) = trjdat(lez,n,it)
+       trjdat(lezpl,n,nst,it) = trjdat(lez,n,nst,it)
       ENDIF
 
-       trjdat(lemagpl,n,it) = Sqrt(dumint**2 + trjdat(leypl,n,it)**2 + trjdat(lexpl,n,it)**2)
+       trjdat(lemagpl,n,nst,it) = Sqrt(dumint**2 + trjdat(leypl,n,nst,it)**2 + trjdat(lexpl,n,nst,it)**2)
 
       ! delta-Ez
       call mlint2  &
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facxw, facyw, faczw,iw,jw,kw, 7)
        
-       trjdat(ldelez,n,it) = dumint
+       trjdat(ldelez,n,nst,it) = dumint
       
       ENDIF
       
@@ -2080,7 +2285,7 @@
 
         rcgs =  1.e-3*dumint
         vtden = sqrt(0.0011225/rcgs)
-        qr = Max( 0.0, trjdat(lrt,n,it) )
+        qr = Max( 0.0, trjdat(lrt,n,nst,it) )
         vt = 36.34*(qr*rcgs)**0.1364 * vtden
         IF ( .not. ( vt >= 0. .and. vt < 100. ) ) THEN
           write(0,*) 'traj: problem with vt! vt = ',vt,qr,vtden,rcgs
@@ -2101,9 +2306,17 @@
       IF ( it == 3 ) THEN
       IF ( microp(1:1) == 'Z' ) THEN ! graupel + hail
       
+        IF ( lf > 1 ) THEN
+           tmp = qx(1,lf)
+           vtmp = vtxbar(1,lf,1)
+        ELSE
+           tmp = 0.0
+           vtmp = 0.0
+        ENDIF
+
         IF ( lhl > 1 ) THEN
-         IF ( qx(1,lh) + qx(1,lhl) > Min(qxmin(lh),qxmin(lhl)) ) THEN
-           vt = (qx(1,lh)*vtxbar(1,lh,1) + qx(1,lhl)*vtxbar(1,lhl,1) ) / ( qx(1,lh) + qx(1,lhl) )
+         IF ( qx(1,lh) + qx(1,lhl) + tmp > Min(qxmin(lh),qxmin(lhl)) ) THEN
+           vt = (qx(1,lh)*vtxbar(1,lh,1) + qx(1,lhl)*vtxbar(1,lhl,1) + tmp*vtmp ) / ( qx(1,lh) + qx(1,lhl) + tmp )
          ENDIF
         ELSE
          vt = vtxbar(1,lh,1)
@@ -2113,6 +2326,12 @@
         denom = qx(1,lh)
         qmin = qxmin(lh)
         
+        IF ( lf > 1 ) THEN
+          numer = numer + qx(1,lf)*vtxbar(1,lf,1)
+          denom = denom + qx(1,lf)
+          qmin = Min( qmin, qxmin(lf) )
+        ENDIF
+
         IF ( lhl > 1 ) THEN
           numer = numer + qx(1,lhl)*vtxbar(1,lhl,1)
           denom = denom + qx(1,lhl)
@@ -2135,6 +2354,12 @@
         numer = qx(1,lr)*vtxbar(1,lr,1) + qx(1,lh)*vtxbar(1,lh,1)
         denom = qx(1,lr) + qx(1,lh)
         qmin = Min( qxmin(lr), qxmin(lh) )
+
+        IF ( lf > 1 ) THEN
+          numer = numer + qx(1,lf)*vtxbar(1,lf,1)
+          denom = denom + qx(1,lf)
+          qmin = Min( qmin, qxmin(lf) )
+        ENDIF
         
         IF ( lhl > 1 ) THEN
           numer = numer + qx(1,lhl)*vtxbar(1,lhl,1)
@@ -2156,7 +2381,7 @@
       
         vt = vtxbar(1,lh,1)
          
-         IF ( trjdat(lres,n,it) > 273.15 .and. qx(1,lh) > qxmin(lh) .and. wint < 3.0 ) THEN ! weighted between rain and graupel for melting in weak updraft
+         IF ( trjdat(lres,n,nst,it) > 273.15 .and. qx(1,lh) > qxmin(lh) .and. wint < 3.0 ) THEN ! weighted between rain and graupel for melting in weak updraft
 !          IF ( qx(1,lh) + qx(1,lr) > qxmin(lh) ) THEN
            vt = (qx(1,lh)*vtxbar(1,lh,1) + qx(1,lr)*vtxbar(1,lr,1) ) / ( qx(1,lh) + qx(1,lr) )
 !          ENDIF
@@ -2180,43 +2405,43 @@
       ENDIF
       ENDIF ! it == 6
 
-      trjdat(lwt,n,it) = wint
+      trjdat(lwt,n,nst,it) = wint
 
       wint = wint - vt
       
-      trjdat(lw2,n,it) = wint
+      trjdat(lw2,n,nst,it) = wint
 
       IF ( ipelec > 0 ) THEN
       
       wint = wint + riserate
       
-      trjdat(lwtrise,n,it) = wint
+      trjdat(lwtrise,n,nst,it) = wint
       
       ENDIF
 
-      trjdat(lgdia,n,it) = xdia(1,lh,3)
-      trjdat(lrdia,n,it) = xdia(1,lr,3)
+      trjdat(lgdia,n,nst,it) = xdia(1,lh,3)
+      trjdat(lrdia,n,nst,it) = xdia(1,lr,3)
       IF ( lhl > 1 ) THEN
-        trjdat(lhdia,n,it) = xdia(1,lhl,3)
+        trjdat(lhdia,n,nst,it) = xdia(1,lhl,3)
       ELSE
-        trjdat(lhdia,n,it) = 0.0
+        trjdat(lhdia,n,nst,it) = 0.0
       ENDIF
 !      IF ( xdia(1,lhl,3) < -1 .or. n == 1 ) THEN
-!        write(0,*) 'TRAJ: n, it, hwdia = ',n,it,xdia(1,lhl,3)
+!        write(0,*) 'TRAJ: n, it, hwdia = ',n,nst,it,xdia(1,lhl,3)
 !        write(0,*) 'i,j,k,myrank = ',ic,jc,kc,my_rank
-!        write(0,*) 'x,y,z = ',trjdat(lx,n,it),trjdat(ly,n,it),trjdat(lz,n,it)
+!        write(0,*) 'x,y,z = ',trjdat(lx,n,nst,it),trjdat(ly,n,nst,it),trjdat(lz,n,nst,it)
 !        write(0,*) 'q,c = ',qx(1,lhl),cx(1,lhl)
 !      ENDIF
-      trjdat(lcg,n,it) = cxtmp(1,lh)
+      trjdat(lcg,n,nst,it) = cxtmp(1,lh)
       
-      IF ( ninfo >= lchl .and. lhl > 1 ) trjdat(lchl,n,it) = cxtmp(1,lhl)
-      IF ( ninfo >= lccw ) trjdat(lccw,n,it) = cxtmp(1,lc)
-      IF ( ninfo >= lcci ) trjdat(lcci,n,it) = cxtmp(1,li)
-      IF ( ninfo >= lcsw ) trjdat(lcsw,n,it) = cxtmp(1,ls)
+      IF ( ninfo >= lchl .and. lhl > 1 ) trjdat(lchl,n,nst,it) = cxtmp(1,lhl)
+      IF ( ninfo >= lccw ) trjdat(lccw,n,nst,it) = cxtmp(1,lc)
+      IF ( ninfo >= lcci ) trjdat(lcci,n,nst,it) = cxtmp(1,li)
+      IF ( ninfo >= lcsw ) trjdat(lcsw,n,nst,it) = cxtmp(1,ls)
       
-      trjdat(lvtg,n,it) = vtxbar(1,lh,1)
-      IF ( lhl > 1 ) trjdat(lvth,n,it) = vtxbar(1,lhl,1)
-      trjdat(lvtr,n,it) = vtxbar(1,lr,1)
+      trjdat(lvtg,n,nst,it) = vtxbar(1,lh,1)
+      IF ( lhl > 1 ) trjdat(lvth,n,nst,it) = vtxbar(1,lhl,1)
+      trjdat(lvtr,n,nst,it) = vtxbar(1,lr,1)
 
 
       
@@ -2231,8 +2456,8 @@
       (idebug, elec(ipot)%flt3d,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
        
-       trjdat(lphi,n,it) = dumint
-       trjdat(lphipl,n,it) = trjdat(lphi,n,it) 
+       trjdat(lphi,n,nst,it) = dumint
+       trjdat(lphipl,n,nst,it) = trjdat(lphi,n,nst,it) 
 
       IF (  allocated( elecrates ) ) THEN
       
@@ -2243,16 +2468,16 @@
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 4)
        
-       trjdat(lphipl,n,it) = dumint
+       trjdat(lphipl,n,nst,it) = dumint
       ELSE
-       trjdat(lphipl,n,it) = trjdat(lphi,n,it) 
+       trjdat(lphipl,n,nst,it) = trjdat(lphi,n,nst,it) 
       ENDIF
 
       call mlint2  &
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 8)
        
-       trjdat(ldelphi,n,it) = dumint
+       trjdat(ldelphi,n,nst,it) = dumint
 
 
       ! RAR
@@ -2260,21 +2485,21 @@
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 9)
        
-       trjdat(lrarh,n,it) = dumint
+       trjdat(lrarh,n,nst,it) = dumint
 
       ! RGHIS
       call mlint2  &
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 10)
        
-       trjdat(lcrgis,n,it) = dumint
+       trjdat(lcrgis,n,nst,it) = dumint
 
       ! EHW
       call mlint2  &
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 11)
        
-       trjdat(lehw,n,it) = dumint
+       trjdat(lehw,n,nst,it) = dumint
        
 
       ! RAR
@@ -2282,21 +2507,21 @@
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 12)
        
-       trjdat(lrarhl,n,it) = dumint
+       trjdat(lrarhl,n,nst,it) = dumint
 
       ! RGHIS
       call mlint2  &
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 13)
        
-       trjdat(lcrhis,n,it) = dumint
+       trjdat(lcrhis,n,nst,it) = dumint
 
       ! EHW
       call mlint2  &
       (idebug, elecrates,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, nelecrates, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 14)
        
-       trjdat(lehlw,n,it) = dumint
+       trjdat(lehlw,n,nst,it) = dumint
        
        
       ENDIF
@@ -2307,7 +2532,7 @@
       (idebug, elec(iscnet)%flt3d,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
        1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
        
-       trjdat(lnetchg,n,it) = 1.e9*dumint
+       trjdat(lnetchg,n,nst,it) = 1.e9*dumint
       
        dumint = 0.0
        kz = 0
@@ -2329,7 +2554,7 @@
          ENDDO
          ENDDO
          ENDDO
-        trjdat(lnetchgave,n,it) = 1.e9*dumint/float(kz)
+        trjdat(lnetchgave,n,nst,it) = 1.e9*dumint/float(kz)
 
        ELSE ! for chgavez=0, interpolate the charge layer for smoother data
 
@@ -2339,56 +2564,69 @@
          (idebug, t0,   -ng+1, nx+ng, -ng+1, ny+ng, -ng+1, nz+ng, &
           1, 1, nx, ny, nz, dumint, facx, facy, facz,ic,jc,kc, 1)
 
-          trjdat(lnetchgave,n,it) = dumint
+          trjdat(lnetchgave,n,nst,it) = dumint
 
         ENDIF
 
-!        trjdat(lnetchgave,n,it) = 1.e9*dumint/float(kz)
+!        trjdat(lnetchgave,n,nst,it) = 1.e9*dumint/float(kz)
 
-        trjdat( lnumflash,n,it) = numflashtraj
+        trjdat( lnumflash,n,nst,it) = numflashtraj
 
       
       ENDIF
 
+
+      IF ( time_real >= trajstarttimes(nst) ) THEN
 
       IF ( icomtraj < 2 .and. iverttraj == 0 ) THEN ! for icomtraj == 2 or iverttraj > 0, keep the sounding vertical
-        trjdat(lxn,n,it) = Max(0.5*dx, Min( xdomain - 0.5*dx, x + dt*uint ) )
-        trjdat(lyn,n,it) = Max(0.5*dy, Min( xdomain - 0.5*dy, y + dt*vint ) )
+        trjdat(lxn,n,nst,it) = Max(0.5*dx, Min( xdomain - 0.5*dx, x + dt*uint ) )
+        trjdat(lyn,n,nst,it) = Max(0.5*dy, Min( xdomain - 0.5*dy, y + dt*vint ) )
       ELSE
-        trjdat(lxn,n,it) = trjdat(lx,n,it) ! x
-        trjdat(lyn,n,it) = trjdat(ly,n,it) ! y
+        trjdat(lxn,n,nst,it) = trjdat(lx,n,nst,it) ! x
+        trjdat(lyn,n,nst,it) = trjdat(ly,n,nst,it) ! y
       ENDIF
-      trjdat(lzn,n,it) = Max(0.0, Min(gzt(nz-1,1),  z + dt*wint) )
+      trjdat(lzn,n,nst,it) = Max(0.0, Min(gzt(nz-1,1),  z + dt*wint) )
+
+      ELSE
+        ! trajectory hasn't "launched" yet, so keep it at its starting grid point
+        ! Could also move horizontally with grid motion? Should be an optional motion, too?
+        trjdat(lxn,n,nst,it) = trjdat(lx,n,nst,it) ! x
+        trjdat(lyn,n,nst,it) = trjdat(ly,n,nst,it) ! y
+        trjdat(lzn,n,nst,it) = trjdat(lz,n,nst,it) ! z
+
+      ENDIF
       
-      if ( trjdat(lp,n,it) .lt. 999999.  ) then
-      pres = trjdat(lp,n,it) + trjdat(lpp,n,it)
-      tc = trjdat(ltt,n,it)
-      qvc = trjdat(lqt,n,it)
-      trjdat(lthe,n,it) = thetae(qvc,tc,pres)
-      IF ( idebug .ge. 1 ) print*,qvc,tc,pres,trjdat(lthe,n,it)
+      if ( trjdat(lp,n,nst,it) .lt. 999999.  ) then
+      pres = trjdat(lp,n,nst,it) + trjdat(lpp,n,nst,it)
+      tc = trjdat(ltt,n,nst,it)
+      qvc = trjdat(lqt,n,nst,it)
+      trjdat(lthe,n,nst,it) = thetae(qvc,tc,pres)
+      IF ( idebug .ge. 1 ) print*,qvc,tc,pres,trjdat(lthe,n,nst,it)
       end if
 !  
-      trjdat(load,n,it) =   &
-        -g*(trjdat(lct,n,it) &
-          +trjdat(lrt,n,it) &
-          +trjdat(lit,n,it) &
-          +trjdat(lst,n,it) &
-          +trjdat(lht,n,it) &
-          +trjdat(lgt,n,it))
-!      trjdat(loadr,n,it) = g*(trjdat(lrt,n,it))
-!      trjdat(loads,n,it) = g*(trjdat(lst,n,it))
-!      trjdat(loadg,n,it) = g*(trjdat(lgt,n,it))
-!      trjdat(loadh,n,it) = g*(trjdat(lht,n,it))
-!      trjdat(loadc,n,it) = g*(trjdat(lct,n,it)+trjdat(lit,n,it))
+      trjdat(load,n,nst,it) =   &
+        -g*(trjdat(lct,n,nst,it) &
+          +trjdat(lrt,n,nst,it) &
+          +trjdat(lit,n,nst,it) &
+          +trjdat(lst,n,nst,it) &
+          +trjdat(lht,n,nst,it) &
+          +trjdat(lgt,n,nst,it))
+!      trjdat(loadr,n,nst,it) = g*(trjdat(lrt,n,nst,it))
+!      trjdat(loads,n,nst,it) = g*(trjdat(lst,n,nst,it))
+!      trjdat(loadg,n,nst,it) = g*(trjdat(lgt,n,nst,it))
+!      trjdat(loadh,n,nst,it) = g*(trjdat(lht,n,nst,it))
+!      trjdat(loadc,n,nst,it) = g*(trjdat(lct,n,nst,it)+trjdat(lit,n,nst,it))
 
 #ifdef MPI
 ! load data to send to rank 0 
-      trjbuf(n0:ninfo,ntraj_tile) = trjdat(n0:ninfo,n,it)
+      trjbuf(n0:ninfo,ntraj_tile) = trjdat(n0:ninfo,n,nst,it)
       trjbuf(ninfo+1,ntraj_tile) = n
       trjbuf(ninfo+2,ntraj_tile) = it
+      trjbuf(ninfo+3,ntraj_tile) = nst
 #endif
    
      ENDDO ! n
+     ENDDO ! nst
      ENDDO ! it
 
 ! DO MPI COMMS HERE -- borrowed from CM1 (thanks, George!)
@@ -2398,42 +2636,47 @@
 
         DO proc = 1,number_of_processes-1
           CALL MPI_RECV(ntraj_tile,1,MPI_INTEGER,proc,proc,my_comm,mpi_status,mpi_error_code)
-          IF ( ntraj_tile > 0 ) CALL MPI_RECV(trjbuf,(ninfo+2)*ntraj_tile,MPI_REAL,proc,1000+proc,my_comm,mpi_status,mpi_error_code)
+          IF ( ntraj_tile > 0 ) CALL MPI_RECV(trjbuf,(ninfo+3)*ntraj_tile,MPI_REAL,proc,1000+proc,my_comm,mpi_status,mpi_error_code)
           DO n = 1,ntraj_tile
             it = NInt((trjbuf(ninfo+2,n)))
             in = Nint(trjbuf(ninfo+1,n))
-            trjdat(n0:ninfo,in,it) = trjbuf(n0:ninfo,n)
+            nst = Nint(trjbuf(ninfo+3,n))
+            trjdat(n0:ninfo,in,nst,it) = trjbuf(n0:ninfo,n)
           ENDDO
         ENDDO
 
       ELSE
 
         CALL MPI_SEND(ntraj_tile,1,MPI_INTEGER,0,my_rank,my_comm,mpi_error_code)
-        IF ( ntraj_tile > 0 ) CALL MPI_SEND(trjbuf,(ninfo+2)*ntraj_tile,MPI_REAL,0,1000+my_rank,my_comm,mpi_error_code)
+        IF ( ntraj_tile > 0 ) CALL MPI_SEND(trjbuf,(ninfo+3)*ntraj_tile,MPI_REAL,0,1000+my_rank,my_comm,mpi_error_code)
 
       ENDIF
 
       IF ( my_rank == 0 ) THEN
        DO it = 1,ntrajtype
+        DO nst = 1,numstart
         DO n = 1,ntraj
           in = n + ntraj*(it-1)
-          trjloc(1,in) = trjdat(lxn,n,it)
-          trjloc(2,in) = trjdat(lyn,n,it)
-          trjloc(3,in) = trjdat(lzn,n,it)
+          trjloc(1,in,nst) = trjdat(lxn,n,nst,it)
+          trjloc(2,in,nst) = trjdat(lyn,n,nst,it)
+          trjloc(3,in,nst) = trjdat(lzn,n,nst,it)
+        ENDDO
         ENDDO
        ENDDO
       ENDIF
 
       CALL MPI_BARRIER (my_comm,mpi_error_code)
-      CALL MPI_BCAST(trjloc,3*ntraj*ntrajtype,MPI_REAL,0,my_comm,mpi_error_code)
+      CALL MPI_BCAST(trjloc,3*ntraj*ntrajtype*numstart,MPI_REAL,0,my_comm,mpi_error_code)
 
       IF ( my_rank /= 0 ) THEN
         DO it = 1,ntrajtype
+        DO nst = 1,numstart
         DO n = 1,ntraj
           in = n + ntraj*(it-1)
-          trjdat(lxn,n,it) = trjloc(1,in)
-          trjdat(lyn,n,it) = trjloc(2,in)
-          trjdat(lzn,n,it) = trjloc(3,in)
+          trjdat(lxn,n,nst,it) = trjloc(1,in,nst)
+          trjdat(lyn,n,nst,it) = trjloc(2,in,nst)
+          trjdat(lzn,n,nst,it) = trjloc(3,in,nst)
+        ENDDO
         ENDDO
         ENDDO
       ENDIF
@@ -2464,27 +2707,42 @@
 ! once per variable (ninfo times) instead of the original inefficient ninfo*ntraj calls, but writing contiguous
 ! data is probably a good bit faster. It is also easy enough to transpose the arrays after reading them to get into
 ! trajectory space
+      DO nst = 1,numstart
       DO n = 1,ntraj
-        data2d(n,1) = trjdat(nt,n,it)
+!        data2d(n,1) = trjdat(nt,n,nst,it)
+        data3d(1,n,1) = trjdat(nt,n,nst,it)
       ENDDO
       
         
-      start2d(1) = 1
-      start2d(2) = trajstep
-      count2d(1) = ntraj
-      count2d(2) = 1
+!       start2d(1) = 1
+!       start2d(2) = trajstep
+!       count2d(1) = ntraj
+!       count2d(2) = 1
+
+      ! write out one variable at at time for trajectories at start time nst
+      start3d(1) = nst ! start time index
+      start3d(2) = 1   ! trajectory index
+      start3d(3) = trajstep ! trajectory time index
+      count3d(1) = 1
+      count3d(2) = ntraj
+      count3d(3) = 1
+
+!       dimids(1) = dim_id(2)
+!       dimids(2) = dim_id(1)
+!       dimids(3) = dim_id(0)
 
         
-        status = nf90_put_var(ncid, trajvars(nt)%varid, data2d, start2d, count2d )
+        status = nf90_put_var(ncid, trajvars(nt)%varid, data3d, start3d, count3d )
         IF(status /= NF90_NOERR) THEN 
           write(0,*) 'NF90_PUT_VAR:  Error writing variable: ', trajvars(nt)%name
-          write(0,*) 'start2d = ',start2d(1),start2d(2)
-          write(0,*) 'count2d = ',count2d(1),count2d(2)
-          write(0,*) 'start2d = ',start2d(1),start2d(2)
+          write(0,*) 'start2d = ',start3d(1),start3d(2),start3d(3)
+          write(0,*) 'count2d = ',count3d(1),count3d(2),count3d(3)
+          write(0,*) 'start2d = ',start3d(1),start3d(2),start3d(3)
           call commasmpi_abort()
         ENDIF
       
 !       ENDIF
+      ENDDO
       ENDDO
 
       status = nf90_close(ncid)
@@ -2494,11 +2752,11 @@
       IF ( itraj >= 2 ) THEN ! write text files
       DO n = 1,ntraj
 
-      ic = ifix(( trjdat(lx,n,it) +eps)/dx + 0.5)
-      jc = ifix(( trjdat(ly,n,it)+eps)/dy + 0.5)
+      ic = ifix(( trjdat(lx,n,nst,it) +eps)/dx + 0.5)
+      jc = ifix(( trjdat(ly,n,nst,it)+eps)/dy + 0.5)
       kc = 1
       DO kz=1,nz-1
-        IF ( gzt(kz,1) .le. trjdat(lz,n,it) ) THEN
+        IF ( gzt(kz,1) .le. trjdat(lz,n,nst,it) ) THEN
           kc = kz
         ENDIF
       ENDDO
@@ -2506,19 +2764,19 @@
       write(trj_unit+it-1,*) '==================================================='
       write(trj_unit+it-1,*) 'TRAJ'
       write(trj_unit+it-1,71) n, 1, time_real, ic, jc, kc
-      write(trj_unit+it-1,72) trjdat(lx,n,it),trjdat(ly,n,it),trjdat(lz,n,it)
-      write(trj_unit+it-1,73) trjdat(lut,n,it),trjdat(lvt,n,it),trjdat(lwt,n,it),trjdat(lw2,n,it)
-      write(trj_unit+it-1,72) trjdat(lp,n,it),trjdat(lpp,n,it),trjdat(ltt,n,it)
-      write(trj_unit+it-1,72) trjdat(let,n,it),trjdat(lqt,n,it),trjdat(lct,n,it)
-      write(trj_unit+it-1,72) trjdat(lrt,n,it),trjdat(lit,n,it),trjdat(lst,n,it)
-      write(trj_unit+it-1,72) trjdat(lgt,n,it),trjdat(lfrz,n,it),trjdat(lmlt,n,it)
-      write(trj_unit+it-1,72) trjdat(ldep,n,it),trjdat(lsub,n,it),trjdat(lcnd,n,it)
-      write(trj_unit+it-1,72) trjdat(levp,n,it),trjdat(lrevp,n,it),trjdat(lgmlt,n,it)
-!      write(trj_unit+it-1,72) trjdat(loadr,n,it),trjdat(loads,n,it),trjdat(loadg,n,it)
-      write(trj_unit+it-1,72) trjdat(lht,n,it),trjdat(load,n,it),trjdat(lpgrd,n,it)
-      write(trj_unit+it-1,72) trjdat(lbuoy,n,it),trjdat(lthe,n,it),trjdat(lres,n,it)
-!      write(trj_unit+it-1,73) trjdat(lht,n,it),trjdat(loadh,n,it)
-!      write(trj_unit+it-1,72)  trjdat(lgdia,n,it),trjdat(lcg,n,it),trjdat(lvtg,n,it) 
+      write(trj_unit+it-1,72) trjdat(lx,n,nst,it),trjdat(ly,n,nst,it),trjdat(lz,n,nst,it)
+      write(trj_unit+it-1,73) trjdat(lut,n,nst,it),trjdat(lvt,n,nst,it),trjdat(lwt,n,nst,it),trjdat(lw2,n,nst,it)
+      write(trj_unit+it-1,72) trjdat(lp,n,nst,it),trjdat(lpp,n,nst,it),trjdat(ltt,n,nst,it)
+      write(trj_unit+it-1,72) trjdat(let,n,nst,it),trjdat(lqt,n,nst,it),trjdat(lct,n,nst,it)
+      write(trj_unit+it-1,72) trjdat(lrt,n,nst,it),trjdat(lit,n,nst,it),trjdat(lst,n,nst,it)
+      write(trj_unit+it-1,72) trjdat(lgt,n,nst,it),trjdat(lfrz,n,nst,it),trjdat(lmlt,n,nst,it)
+      write(trj_unit+it-1,72) trjdat(ldep,n,nst,it),trjdat(lsub,n,nst,it),trjdat(lcnd,n,nst,it)
+      write(trj_unit+it-1,72) trjdat(levp,n,nst,it),trjdat(lrevp,n,nst,it),trjdat(lgmlt,n,nst,it)
+!      write(trj_unit+it-1,72) trjdat(loadr,n,nst,it),trjdat(loads,n,nst,it),trjdat(loadg,n,nst,it)
+      write(trj_unit+it-1,72) trjdat(lht,n,nst,it),trjdat(load,n,nst,it),trjdat(lpgrd,n,nst,it)
+      write(trj_unit+it-1,72) trjdat(lbuoy,n,nst,it),trjdat(lthe,n,nst,it),trjdat(lres,n,nst,it)
+!      write(trj_unit+it-1,73) trjdat(lht,n,nst,it),trjdat(loadh,n,nst,it)
+!      write(trj_unit+it-1,72)  trjdat(lgdia,n,nst,it),trjdat(lcg,n,nst,it),trjdat(lvtg,n,nst,it) 
 
       
       
