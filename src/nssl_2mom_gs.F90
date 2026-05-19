@@ -1425,7 +1425,7 @@
 
 
 ! inline functions for Newton method
-       real :: galpha, dgalpha
+       real :: galpha, dgalpha, zraten, zrateq, zrateqn
        real :: a_in
        logical, parameter :: newton = .false.
 
@@ -4783,6 +4783,7 @@
 !
       do mgs = 1,ngscnt
       qraci(mgs) = 0.0
+      qracif(mgs) = 0.0
       craci(mgs) = 0.0
       qracs(mgs) = 0.0
       IF ( eri(mgs) .gt. 0.0 .and. iacr .ge. 1 .and. xdia(mgs,lr,3) .gt. 2.*rwradmn ) THEN
@@ -6112,9 +6113,17 @@
        IF ( irainbreak == 1 .or. irainbreak == 10 ) THEN
                 crbreak = Max( 0.0,  rainbreakfac* (rho0(mgs)*qx(mgs,lr))**2 ) ! hand fit to lower range of wkqss output
                 cracr(mgs) = cracr(mgs) - crbreak ! cracr is subtracted, so negative value for breakup
-       ELSEIF ( irainbreak == 2 .or. irainbreak == 20 ) THEN
+       ELSEIF ( irainbreak == 2 .or. irainbreak == 20 .or. irainbreak == 12 ) THEN
           ! irainbreak == 20 does not work as intended
+              IF (  irainbreak == 12 ) THEN
+                IF ( xdia(mgs,lr,1) > 300.e-6 ) THEN
+                  crbreak = Max( 0.0,  rainbreakfac*(rho0(mgs)*qx(mgs,lr))**2 ) ! hand fit to lower range of wkqss output
+                ELSE
+                  crbreak = 0.0
+                ENDIF
+              ELSE
                 crbreak = Max( 0.0,  rainbreakfac*(1. - ec0(mgs))*(rho0(mgs)*qx(mgs,lr))**2 ) ! hand fit to lower range of wkqss output
+              ENDIF
 !                crbreak = Max(0.0, -0.18 + 1.139e6 * (rho0(mgs)*qx(mgs,lr) + 0.00038106)**2)
                 cracr(mgs) = cracr(mgs) - crbreak ! cracr is subtracted, so negative value for breakup
        ELSEIF ( irainbreak == 3 .and. qx(mgs,lr) > qxmin(lr) .and. ipconc >= 5  ) THEN
@@ -6197,10 +6206,21 @@
 !             zxd1 = 0
 !            ENDIF
 !            zrbreak = Max(0.0, zrbreak - crbreaksmall*drsmall**6)
-       ELSEIF ( irainbreak == 12 ) THEN
-                crbreak = Max( 0.0, 3.8098 * (rho0(mgs)*qx(mgs,lr))**1.9416 ) ! best fit to lower range of wkqss (collision only) output
-                cracr(mgs) = cracr(mgs) - crbreak ! cracr is subtracted, so negative value for breakup
+!       ELSEIF ( irainbreak == 12 ) THEN
+!                crbreak = Max( 0.0, 3.8098 * (rho0(mgs)*qx(mgs,lr))**1.9416 ) ! best fit to lower range of wkqss (collision only) output
+!                cracr(mgs) = cracr(mgs) - crbreak ! cracr is subtracted, so negative value for breakup
              ENDIF
+       ENDIF
+
+       IF ( lzr > 0 .and. cracr(mgs) /= 0.0 .and. cx(mgs,lr) > 0.0  ) THEN
+!          tmp = qx(mgs,lr)/cx(mgs,lr)
+!          zracr(mgs) =  g1x(mgs,lr)*(6.*rho0(mgs)/(pi*1000.))**2*( tmp**2 * cracr(mgs) )
+        ! rewrite because original can overestimate zracr if -cracr*dtp is on the order of cx (i.e.,
+        !  large increase in the number of drops, which violates differential assumption
+          zracr(mgs) = zraten(dtpinv,dtp,g1x(mgs,lr),rho0(mgs),rho_qr,qx(mgs,lr),cx(mgs,lr),cracr(mgs))
+
+!          zracr(mgs) = dtpinv*g1x(mgs,lr)*(6.*rho0(mgs)*qx(mgs,lr)/(pi*1000.))**2 &
+!                     * ( cracr(mgs) )/((cx(mgs,lr) - dtp*cracr(mgs))*(cx(mgs,lr)))
        ENDIF
 
 !      cracw(mgs) = min(cracw(mgs),cxmxd(mgs,lc)) 
@@ -6870,7 +6890,7 @@
               ! Do the correction for alphamax
               zrfrz(mgs) = zxd1*dtpinv
               ! tmp4 is the Z from the converted particles assuming shape of alphamax
-              tmp3 = g1xmax*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lh)/6.0)**2)
+              tmp3 = g1xmax*(rho0(mgs)*qxd1)**2/((pi*rhofrz/6.0)**2)
               tmp4 = tmp3/cxd1
               IF ( tmp4 > zxd1 ) THEN ! calculate new graupel/fd number to match zxd1
                 ! increase cxd1 to make z,q,c rates consistent
@@ -13521,7 +13541,7 @@
 !
       do mgs = 1,ngscnt
       qracif(mgs) = qraci(mgs)
-      cracif(mgs) = craci(mgs)
+!      cracif(mgs) = craci(mgs)
 !      ciacrf(mgs) = ciacr(mgs)
       end do
 !
@@ -14920,7 +14940,7 @@
       IF ( lf > 1 ) THEN
       do mgs = 1,ngscnt
       pqfwi(mgs) =    &
-     &  +il5(mgs)*((1.0-ffrzh)*qrfrzf(mgs)  + (1-il3(mgs))*(1.0-ffrzh)*(qiacrf(mgs)+qracif(mgs)))   &
+     &  +il5(mgs)*((1.0-ffrzh)*qrfrzf(mgs)  + (1-il3(mgs))*(1.0-ffrzh)*ifiacrg*(qiacrf(mgs)+qracif(mgs)))   &
      &  +il5(mgs)*qfdpv(mgs)   &
      &  +Max(0.0, qfcev(mgs))   &
      &  +qfacr(mgs)+qfacw(mgs)   &
@@ -15107,10 +15127,15 @@
            zfacs(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*( tmp ) * qfacs(mgs) )
         
         IF ( .not. mixedphase  .and. ibinhmlr < 1 ) THEN
-        zfmlr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*tmp * qfmlr(mgs) - tmp**2 * cfmlr(mgs)  )
+         zfmlr(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lf),rho0(mgs),xdn(mgs,lf),qx(mgs,lf), &
+                           cx(mgs,lf),cfmlr(mgs),qfmlr(mgs))
+!        zfmlr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*tmp * qfmlr(mgs) - tmp**2 * cfmlr(mgs)  )
         ENDIF
         
-        zfshr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*tmp * qfshr(mgs) - tmp**2 * cfshr(mgs)  )
+         ! leave zero and combine with zfacr and zfacw because sum is what matters
+         zfshr(mgs) = 0.0 ! zrateqn(dtpinv,dtp,g1x(mgs,lf),rho0(mgs),xdn(mgs,lf),qx(mgs,lf), &
+                          ! cx(mgs,lf),cfshr(mgs),qfshr(mgs))
+!        zfshr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*tmp * qfshr(mgs) - tmp**2 * cfshr(mgs)  )
 
 !        IF ( lzr > 0 .and. qfshr(mgs) /= 0.0 .and. cfshrr(mgs) /= 0.0 .and. ibinhmlr < 1 ) THEN
         IF ( lzr > 0 .and. qfshr(mgs) /= 0.0 .and. cfshrr(mgs) /= 0.0 ) THEN
@@ -15155,9 +15180,14 @@
           g1 = g1x(mgs,lf) ! (6.0 + alp)*(5.0 + alp)*(4.0 + alp)/((3.0 + alp)*(2.0 + alp)*(1.0 + alp))
 
           IF ( .true. ) THEN  ! {
-          IF ( qfacr(mgs) .gt. 0.0 ) THEN
+          IF ( qfacr(mgs) + qfacw(mgs) .gt. 0.0 ) THEN
 
-          zfacr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*( qx(mgs,lf)/cx(mgs,lf)) * qfacr(mgs) )
+            qtmp = qfacr(mgs) + qfacw(mgs) + qfshr(mgs) - qfmul1(mgs)
+            ctmp = cfshr(mgs)
+
+            zfacr(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lf),rho0(mgs),xdn(mgs,lf),qx(mgs,lf), &
+                           cx(mgs,lf),ctmp,qtmp)
+!          zfacr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*( qx(mgs,lf)/cx(mgs,lf)) * qfacr(mgs) )
 
 
 
@@ -15178,7 +15208,10 @@
 !     :         ((3.0 + alp)*(2.0 + alp)*(1.0 + alp))
           IF ( qfacw(mgs) .gt. 0.0 ) THEN
 !          zfacw(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( qx(mgs,lf)/cx(mgs,lf)) * qfacw(mgs) )
-          zfacw(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*( qx(mgs,lf)/cx(mgs,lf)) * qfacw(mgs) )
+           ! zfacw is combined with zfacr (and zfshr)
+            zfacw(mgs) = 0.0 ! zrateq(dtpinv,dtp,g1x(mgs,lf),rho0(mgs),xdn(mgs,lf),qx(mgs,lf), &
+                          ! cx(mgs,lf),qfacw(mgs))
+!          zfacw(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*( qx(mgs,lf)/cx(mgs,lf)) * qfacw(mgs) )
 
 !          z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( (qx(mgs,lf)+dtp*(qfacw(mgs)-qfmul1(mgs)))**2)/(cx(mgs,lf))
           IF ( z > zx(mgs,lf) ) THEN
@@ -15199,7 +15232,9 @@
           ENDIF ! }
 
           IF ( qhlcnf(mgs) .gt. 0.0 .and. ihlcnh < 2  ) THEN
-           zhlcnf(mgs) = g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*( tmp ) * qhlcnf(mgs) - tmp**2 * chlcnf(mgs) )
+           zhlcnf(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lf),rho0(mgs),xdn(mgs,lf),qx(mgs,lf), &
+                           cx(mgs,lf),chlcnf(mgs),qhlcnf(mgs))
+!           zhlcnf(mgs) = g1*(6.*rho0(mgs)/(pi*xdn(mgs,lf)))**2*( 2.*( tmp ) * qhlcnf(mgs) - tmp**2 * chlcnf(mgs) )
            !IF ( zhlcnf(mgs) < 0.0 ) THEN
            !  write(0,*) 'zhlcnf < 0? z,q,c = ', zhlcnf(mgs), qhlcnf(mgs),chlcnf(mgs)
            !  write(0,*) 'tmp,term1,term2: ',tmp,2.*( tmp ) * qhlcnf(mgs),tmp**2 * chlcnf(mgs)
@@ -15217,12 +15252,16 @@
             ziacr(mgs) = 3.6476*rho0(mgs)**2*(alpha(mgs,lr)+2.)/(xdn0(lr)**2*(alpha(mgs,lr)+1.))*  &
      &           ( 2.*tmp * qiacr(mgs) - tmp**2 * ciacr(mgs)  )
             ELSE ! imurain == 1 
-            ziacr(mgs) = 3.6476*rho0(mgs)**2*g1x(mgs,lr)/(xdn0(lr)**2)*  &
-     &           ( 2.*tmp * qiacr(mgs) - tmp**2 * ciacr(mgs)  )
+            ziacr(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lr),rho0(mgs),xdn0(lr),qx(mgs,lr), &
+                           cx(mgs,lr),ciacr(mgs),qiacr(mgs))
+!            ziacr(mgs) = 3.6476*rho0(mgs)**2*g1x(mgs,lr)/(xdn0(lr)**2)*  &
+!     &           ( 2.*tmp * qiacr(mgs) - tmp**2 * ciacr(mgs)  )
             ENDIF
             ziacr(mgs) = Min( ziacr(mgs), zxmxd(mgs,lr) )
 !            ziacrf(mgs) = (xdn(mgs,lr)/xdn(mgs,lf))**2 * ziacr(mgs)
-            ziacrf(mgs) = (xdn(mgs,lr)/xdnmx(lf))**2 * ziacr(mgs)
+            ziacrf(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lf),rho0(mgs),rhofrz,qx(mgs,lf), &
+                           cx(mgs,lf),ciacrf(mgs),qiacrf(mgs))
+!            ziacrf(mgs) = (xdn(mgs,lr)/xdnmx(lf))**2 * ziacr(mgs)
 !            z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*tmp * (qiacrf(mgs) - qsplinter(mgs)) - tmp**2 * ciacrf(mgs)  )
 !            ziacrf(mgs) = Min(  ziacrf(mgs), z )
       ENDIF
@@ -15238,15 +15277,21 @@
             ELSEIF ( imurain == 1 .and. ibiggopt /= 2 ) THEN
 !            zrfrz(mgs) = 3.6476*rho0(mgs)**2*g1x(mgs,lr)/(xdn0(lr)**2) * &
 !     &         ( 2.*tmp * qrfrzf(mgs) - tmp**2 * crfrz(mgs)  )
-            zrfrz(mgs) = 3.6476*rho0(mgs)**2*g1x(mgs,lr)/(xdn0(lr)**2) * &
-     &         ( 2.*tmp * qrfrz(mgs) - tmp**2 * crfrz(mgs)  )
-            zrfrzf(mgs) = 3.6476*rho0(mgs)**2*g1x(mgs,lr)/(rhofrz**2) * &
-     &         ( 2.*tmp * qrfrzf(mgs) - tmp**2 * crfrzf(mgs)  )
+            zrfrz(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lr),rho0(mgs),xdn0(lr),qx(mgs,lr), &
+                           cx(mgs,lr),crfrz(mgs),qrfrz(mgs))
+
+!             zrfrz(mgs) = 3.6476*rho0(mgs)**2*g1x(mgs,lr)/(xdn0(lr)**2) * &
+!      &         ( 2.*tmp * qrfrz(mgs) - tmp**2 * crfrz(mgs)  )
+            zrfrzf(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lr),rho0(mgs),rhofrz,qx(mgs,lr), &
+                           cx(mgs,lr),crfrzf(mgs),qrfrzf(mgs))
+!            zrfrzf(mgs) = 3.6476*rho0(mgs)**2*g1x(mgs,lr)/(rhofrz**2) * &
+!     &         ( 2.*tmp * qrfrzf(mgs) - tmp**2 * crfrzf(mgs)  )
             ENDIF
             zrfrz(mgs) = Min( zrfrz(mgs), Max(0.4,qrfrz(mgs)/qx(mgs,lr))*zx(mgs,lr)*dtpinv )
       ! change this to be alpha=0?
       
       ENDIF
+
 
       pzfwi(mgs) =   &
      &  +(1.0-ffrzh)*(ifrzg*zrfrzf(mgs)   &
@@ -15304,6 +15349,8 @@
       zhdsv(mgs) = 0.0
 !      IF ( lf < 1 ) THEN
       IF ( ffrzh > 0.0 ) THEN
+      ! only initialize if frozen drops are turned off, otherwise is already set above
+      ! If ffrzh = 0, then ziacrf is zeroed out for graupel and can leave value set for diagnostics
       ziacr(mgs) = 0.0
       ziacrf(mgs) = 0.0
       ENDIF
@@ -15330,10 +15377,15 @@
            zhacs(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( tmp ) * qhacs(mgs) )
         
         IF ( .not. mixedphase  .and. ibinhmlr < 1 ) THEN
-        zhmlr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*tmp * qhmlr(mgs) - tmp**2 * chmlr(mgs)  )
+         zhmlr(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lh),rho0(mgs),xdn(mgs,lh),qx(mgs,lh), &
+                           cx(mgs,lh),chmlr(mgs),qhmlr(mgs))
+        ! zhmlr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*tmp * qhmlr(mgs) - tmp**2 * chmlr(mgs)  )
         ENDIF
         
-        zhshr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*tmp * qhshr(mgs) - tmp**2 * chshr(mgs)  )
+         ! combined with zhacr
+         zhshr(mgs) = 0.0 !zrateqn(dtpinv,dtp,g1x(mgs,lh),rho0(mgs),xdn(mgs,lh),qx(mgs,lh), &
+                          ! cx(mgs,lh),chshr(mgs),qhshr(mgs))
+!        zhshr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*tmp * qhshr(mgs) - tmp**2 * chshr(mgs)  )
 
 !        IF ( lzr > 0 .and. qhshr(mgs) /= 0.0 .and. chshrr(mgs) /= 0.0 .and. ibinhmlr < 1 ) THEN
         IF ( lzr > 0 .and. qhshr(mgs) /= 0.0 .and. chshrr(mgs) /= 0.0 ) THEN
@@ -15368,15 +15420,6 @@
          zhshrr(mgs) = Min( 0.0, zhshrr(mgs) )
         ENDIF
 
-        IF ( zhshr(mgs) > 0.0 ) THEN
-          write(0,*) 'Problem with zhshr! zhshr,qhshr,chshr = ',zhshr(mgs),qhshr(mgs),chshr(mgs)
-          write(0,*) 'g1,tmp, qx,cx,zx = ',g1,tmp,qx(mgs,lh),cx(mgs,lh),zx(mgs,lh)
-          write(0,*) ( 2.*tmp * qhshr(mgs) - tmp**2 * chshr(mgs)  ),  2.*tmp * qhshr(mgs), - tmp**2 * chshr(mgs)
-          write(0,*) 'temcg = ',temcg(mgs),'chshr recalc = ',(cx(mgs,lh)/(qx(mgs,lh)+1.e-20))*qhshr(mgs)
-          
-          STOP
-        ENDIF
-
 
 !        zhshr(mgs) =  (xdn0(lr)/(xdn(mgs,lh)))**2*( zx(mgs,lh) * qhshr(mgs) )
         
@@ -15395,7 +15438,11 @@
 
 !          g1r = 36.*(alpha(mgs,lr)+2.0)/((alpha(mgs,lr)+1.0)*pi**2)
 !          zhacr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacr(mgs) )
-          zhacr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacr(mgs) )
+            qtmp = qhacr(mgs) + qhacw(mgs) + qhshr(mgs) - qhmul1(mgs)
+            ctmp = chshr(mgs)
+            zhacr(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lh),rho0(mgs),xdn(mgs,lh),qx(mgs,lh), &
+                           cx(mgs,lh),ctmp,qtmp)
+!          zhacr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacr(mgs) )
 !          zhacrf(mgs) = g1*zhacr
 
           ENDIF
@@ -15408,23 +15455,28 @@
 !     :         ((3.0 + alp)*(2.0 + alp)*(1.0 + alp))
           IF ( qhacw(mgs) .gt. 0.0 ) THEN
 !          zhacw(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacw(mgs) )
-           zhacw(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacw(mgs) )
+            ! combined with zracr
+            zhacw(mgs) = 0.0 !zrateq(dtpinv,dtp,g1x(mgs,lh),rho0(mgs),xdn(mgs,lh),qx(mgs,lh), &
+                             ! cx(mgs,lh),qhacw(mgs))
+!           zhacw(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacw(mgs) )
           ENDIF
 
           ELSE ! } { ! this is not used because of the 'true' above
 
-          IF ( qhacw(mgs) .gt. 0.0 .or. qhacr(mgs) .gt. 0.0 ) THEN
-          z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( (qx(mgs,lh)+dtp*(qhacr(mgs) + qhacw(mgs)-qhmul1(mgs)))**2)/(cx(mgs,lh))
-!          zhacw(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacw(mgs) )
-          IF ( z > zx(mgs,lh) ) THEN
-            zhacw(mgs) = (z - zx(mgs,lh))*dtpinv
-          ENDIF
-          ENDIF
+!           IF ( qhacw(mgs) .gt. 0.0 .or. qhacr(mgs) .gt. 0.0 ) THEN
+!           z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( (qx(mgs,lh)+dtp*(qhacr(mgs) + qhacw(mgs)-qhmul1(mgs)))**2)/(cx(mgs,lh))
+! !          zhacw(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( qx(mgs,lh)/cx(mgs,lh)) * qhacw(mgs) )
+!           IF ( z > zx(mgs,lh) ) THEN
+!             zhacw(mgs) = (z - zx(mgs,lh))*dtpinv
+!           ENDIF
+!           ENDIF
 
           ENDIF ! }
 
           IF ( qhlcnh(mgs) .gt. 0.0 .and. ihlcnh < 2  ) THEN
-           zhlcnh(mgs) = g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( tmp ) * qhlcnh(mgs) - tmp**2 * chlcnh(mgs) )
+           zhlcnh(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lh),rho0(mgs),xdn(mgs,lh),qx(mgs,lh), &
+                           cx(mgs,lh),chlcnh(mgs),qhlcnh(mgs))
+          ! zhlcnh(mgs) = g1*(6.*rho0(mgs)/(pi*xdn(mgs,lh)))**2*( 2.*( tmp ) * qhlcnh(mgs) - tmp**2 * chlcnh(mgs) )
           ENDIF
       ENDIF
 ! qsplinter(mgs)
@@ -15437,12 +15489,16 @@
             ziacr(mgs) = 3.6476*rho0(mgs)**2*(alpha(mgs,lr)+2.)/(xdn0(lr)**2*(alpha(mgs,lr)+1.))*  &
      &           ( 2.*tmp * qiacrf(mgs) - tmp**2 * ciacrf(mgs)  )
             ELSE ! imurain == 1 
-            ziacr(mgs) = 3.6476*rho0(mgs)**2*g1x(mgs,lr)/(xdn0(lr)**2)*  &
-     &           ( 2.*tmp * qiacrf(mgs) - tmp**2 * ciacrf(mgs)  )
+             ziacr(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lr),rho0(mgs),xdn0(lr),qx(mgs,lr), &
+                           cx(mgs,lr),ciacr(mgs),qiacr(mgs))
+!             ziacr(mgs) = 3.6476*rho0(mgs)**2*g1x(mgs,lr)/(xdn0(lr)**2)*  &
+!      &           ( 2.*tmp * qiacrf(mgs) - tmp**2 * ciacrf(mgs)  )
             ENDIF
             ziacr(mgs) = Min( ziacr(mgs), zxmxd(mgs,lr) )
 !            ziacrf(mgs) = (xdn(mgs,lr)/xdn(mgs,lh))**2 * ziacr(mgs)
-            ziacrf(mgs) = (xdn(mgs,lr)/xdnmx(lh))**2 * ziacr(mgs)
+!            ziacrf(mgs) = (xdn(mgs,lr)/xdnmx(lh))**2 * ziacr(mgs)
+            ziacrf(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lh),rho0(mgs),rhofrz,qx(mgs,lh), &
+                           cx(mgs,lh),ciacrf(mgs),qiacrf(mgs))
 !            z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*tmp * (qiacrf(mgs) - qsplinter(mgs)) - tmp**2 * ciacrf(mgs)  )
 !            ziacrf(mgs) = Min(  ziacrf(mgs), z )
       ENDIF
@@ -15487,7 +15543,7 @@
      &         ( 2.*tmp * qhcns(mgs) - tmp**2 * chcnsh(mgs)  )
         ELSE
          write(0,*) 'Value of imusnow not valid. Must be 3 (fix me for =1). imusnow = ',imusnow
-        STOP
+        ! STOP
         ENDIF
       ENDIF
 
@@ -15501,7 +15557,7 @@
 
       pzhwi(mgs) =   &
      &  +ifrzg*ffrzh*(zrfrzf(mgs)   &
-     & +il5(mgs)*ifiacrg*(ziacrf(mgs) ) )   &
+     & +il5(mgs)*ifiacrg*(ziacrf(mgs) ) )   & ! ffrzh turns this off if FD are turned on
 !     : + zhcnsh(mgs) + zhcnih(mgs)   &
      & + zhacw(mgs)   &
      & + zhacr(mgs)   &
@@ -15556,10 +15612,12 @@
           g1 = g1x(mgs,lhl) ! (6.0 + alp)*(5.0 + alp)*(4.0 + alp)/((3.0 + alp)*(2.0 + alp)*(1.0 + alp))
         
         IF ( .not. mixedphase .and. qhlmlr(mgs) /= 0.0 .and. chlmlr(mgs) /= 0.0 .and. ibinhlmlr < 1 ) THEN
-         zhlmlr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lhl)))**2*( 2.*tmp * qhlmlr(mgs) - tmp**2 * chlmlr(mgs)  )
+         zhlmlr(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lhl),rho0(mgs),xdn(mgs,lhl),qx(mgs,lhl), &
+                           cx(mgs,lhl),chlmlr(mgs),qhlmlr(mgs))
+!         zhlmlr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lhl)))**2*( 2.*tmp * qhlmlr(mgs) - tmp**2 * chlmlr(mgs)  )
         ENDIF
-        
-        zhlshr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lhl)))**2*( 2.*tmp * qhlshr(mgs) - tmp**2 * chlshr(mgs)  )
+        ! combine zhlshr into zhlacr below
+        zhlshr(mgs) =  0.0 ! g1*(6.*rho0(mgs)/(pi*xdn(mgs,lhl)))**2*( 2.*tmp * qhlshr(mgs) - tmp**2 * chlshr(mgs)  )
         IF ( lzr > 1 .and. qhlshr(mgs) /= 0.0 .and. chlshrr(mgs) /= 0.0 ) THEN
          IF ( temg(mgs) >= tfr ) THEN
  !           zhlshrr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn0(lr)))**2*( 2.*tmp * qhlshr(mgs) - tmp**2 * chlshrr(mgs)  )
@@ -15581,14 +15639,6 @@
           zhlshrr(mgs) = Min( 0.0, zhlshrr(mgs) )
         ENDIF
 
-        IF ( zhlshr(mgs) > 0.0 ) THEN
-          write(0,*) 'Problem with zhlshr! zhlshr,qhlshr,chlshr = ',zhlshr(mgs),qhlshr(mgs),chlshr(mgs)
-          write(0,*) 'g1,tmp, qx,cx,zx = ',g1,tmp,qx(mgs,lhl),cx(mgs,lhl),zx(mgs,lhl)
-          write(0,*) ( 2.*tmp * qhlshr(mgs) - tmp**2 * chlshr(mgs)  ),  2.*tmp * qhlshr(mgs), - tmp**2 * chlshr(mgs)
-          write(0,*) 'temcg = ',temcg(mgs),'chlshr recalc = ',(cx(mgs,lhl)/(qx(mgs,lhl)+1.e-20))*qhlshr(mgs)
-          
-          STOP
-        ENDIF
 !        zhlshr(mgs) = Min( 0.0, zhlshr(mgs) )
 
 !        zhlshr(mgs) =  (xdn0(lr)/(xdn(mgs,lhl)))**2*( zx(mgs,lhl) * qhlshr(mgs) )
@@ -15605,7 +15655,11 @@
           IF ( .true. ) THEN ! {
           IF ( qhlacr(mgs) .gt. 0.0 ) THEN
 !          z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( (qx(mgs,lhl)+dtp*qhlacr(mgs))**2)/(cx(mgs,lhl))
-          zhlacr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lhl)))**2*( 2.*( tmp ) * qhlacr(mgs) )
+            qtmp = qhlacr(mgs) + qhlacw(mgs) + qhlshr(mgs) - qhlmul1(mgs)
+            ctmp = chlshr(mgs)
+            zhlacr(mgs) = zrateqn(dtpinv,dtp,g1x(mgs,lhl),rho0(mgs),xdn(mgs,lhl),qx(mgs,lhl), &
+                           cx(mgs,lhl),ctmp,qtmp)
+!          zhlacr(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lhl)))**2*( 2.*( tmp ) * qhlacr(mgs) )
 !          zhlacr(mgs) = Min( zxmxd(mgs,lr), zhlacr(mgs) )
           
 !          IF ( z > zx(mgs,lhl) ) THEN
@@ -15618,29 +15672,29 @@
 !        zhacr(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( tmp ) * qhacr(mgs) )
 !        zhacr(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( tmp ) * qhacr(mgs) - tmp**2 * chacr(mgs) )
 
-          IF ( qhlacw(mgs) .gt. 0.0 ) THEN
-          alp = Max( 3.0, alpha(mgs,lhl)+1. )
-          g1 = (6.0 + alp)*(5.0 + alp)*(4.0 + alp)/((3.0 + alp)*(2.0 + alp)*(1.0 + alp))
-          
-!          z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( (qx(mgs,lhl)+dtp*(qhlacw(mgs)-qhlmul1(mgs)))**2)/(cx(mgs,lhl))
-!          zhlacw(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( qx(mgs,lhl)/cx(mgs,lhl)) * qhlacw(mgs) )
-          zhlacw(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lhl)))**2*( 2.*tmp * qhlacw(mgs) )
-
-!          IF ( z > zx(mgs,lhl) ) THEN
-!            zhlacw(mgs) = (z - zx(mgs,lhl))*dtpinv
-!          ENDIF
-          g1 = g1x(mgs,lhl) ! (6.0 + alp)*(5.0 + alp)*(4.0 + alp)/((3.0 + alp)*(2.0 + alp)*(1.0 + alp))
-          ENDIF
+!           IF ( qhlacw(mgs) .gt. 0.0 ) THEN
+!           alp = Max( 3.0, alpha(mgs,lhl)+1. )
+!           g1 = (6.0 + alp)*(5.0 + alp)*(4.0 + alp)/((3.0 + alp)*(2.0 + alp)*(1.0 + alp))
+!           
+! !          z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( (qx(mgs,lhl)+dtp*(qhlacw(mgs)-qhlmul1(mgs)))**2)/(cx(mgs,lhl))
+! !          zhlacw(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( qx(mgs,lhl)/cx(mgs,lhl)) * qhlacw(mgs) )
+!           zhlacw(mgs) =  g1*(6.*rho0(mgs)/(pi*xdn(mgs,lhl)))**2*( 2.*tmp * qhlacw(mgs) )
+! 
+! !          IF ( z > zx(mgs,lhl) ) THEN
+! !            zhlacw(mgs) = (z - zx(mgs,lhl))*dtpinv
+! !          ENDIF
+!           g1 = g1x(mgs,lhl) ! (6.0 + alp)*(5.0 + alp)*(4.0 + alp)/((3.0 + alp)*(2.0 + alp)*(1.0 + alp))
+!           ENDIF
           
           ELSE ! }  .false. {
 
-          IF ( qhlacw(mgs) .gt. 0.0 .or. qhlacr(mgs) .gt. 0.0 ) THEN
-          z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( (qx(mgs,lhl)+dtp*(qhlacr(mgs) + qhlacw(mgs)-qhlmul1(mgs)))**2)/(cx(mgs,lhl))
-!          zhlacw(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( qx(mgs,lhl)/cx(mgs,lhl)) * qhlacw(mgs) )
-          IF ( z > zx(mgs,lhl) ) THEN
-            zhlacw(mgs) = (z - zx(mgs,lhl))*dtpinv
-          ENDIF
-          ENDIF
+!           IF ( qhlacw(mgs) .gt. 0.0 .or. qhlacr(mgs) .gt. 0.0 ) THEN
+!           z = g1*(6.*rho0(mgs)/(pi*1000.))**2*( (qx(mgs,lhl)+dtp*(qhlacr(mgs) + qhlacw(mgs)-qhlmul1(mgs)))**2)/(cx(mgs,lhl))
+! !          zhlacw(mgs) =  g1*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*( qx(mgs,lhl)/cx(mgs,lhl)) * qhlacw(mgs) )
+!           IF ( z > zx(mgs,lhl) ) THEN
+!             zhlacw(mgs) = (z - zx(mgs,lhl))*dtpinv
+!           ENDIF
+!           ENDIF
           
           ENDIF ! }
         
@@ -15690,7 +15744,7 @@
         DO mgs = 1,ngscnt
         
         zracw(mgs) = 0.0
-        zracr(mgs) = 0.0
+        ! zracr(mgs) = 0.0 ! already set to zero
         zrcev(mgs) = 0.0
         zrach(mgs) = 0.0
         zrachl(mgs) = 0.0
@@ -15792,9 +15846,14 @@
          zracw(mgs) =  g1x(mgs,lr)*(6.*rho0(mgs)/(pi*1000.))**2*( 2.*tmp * qracw(mgs) )
         ENDIF
         
-        IF ( cracr(mgs) /= 0.0 .and. cx(mgs,lr) > 0.0  ) THEN
-         zracr(mgs) =  g1x(mgs,lr)*(6.*rho0(mgs)/(pi*1000.))**2*( tmp**2 * cracr(mgs) )
-        ENDIF
+! zracr is already done in breakup section
+!        IF ( ibincracr /= 2 .and. cracr(mgs) /= 0.0 .and. cx(mgs,lr) > 0.0  ) THEN
+        !  zracr(mgs) =  g1x(mgs,lr)*(6.*rho0(mgs)/(pi*1000.))**2*( tmp**2 * cracr(mgs) )
+        ! rewrite because original can overestimate zracr if -cracr*dtp is on the order of cx (i.e.,
+        !  large increase in the number of drops, which violates differential assumption
+!          zracr(mgs) = dtpinv*g1x(mgs,lr)*(6.*rho0(mgs)*qx(mgs,lr)/(pi*1000.))**2 &
+!                      * ( cracr(mgs) )/((cx(mgs,lr) - dtp*cracr(mgs))*(cx(mgs,lr)))
+!        ENDIF
 
         qtmp = qrcev(mgs)
         ctmp = crcev(mgs)
@@ -19648,7 +19707,7 @@
       tmp =  qx(mgs,ls) + dtp*(pqswi(mgs) + pqswd(mgs) - qsshr(mgs)) ! should this add back the shed rain mass? probably!
       chgtmp = 0.0
       IF ( tmp > qxmin(ls) .and. qsshr(mgs) < 0.0 ) THEN
-        chgtmp = scx(mgs,ls) + dtp*(pscswmi(mgs) - pscswmd(mgs))
+        chgtmp = scx(mgs,ls) + dtp*(pscswmi(mgs) + pscswmd(mgs))
        ! fscsw2(mgs) = chgtmp/tmp
        ! pscswmd(mgs) =  pscswmd(mgs) + fscsw2(mgs)*qsshr(mgs)
       ENDIF
@@ -19717,4 +19776,46 @@
 !
 !--------------------------------------------------------------------------
 !
+!  Calculate reflectivity change when only number changes
+!  Differential version can have large error when crate is big and time step is big
+      real function zraten(dtpinv,dtp,g1x,rho0,xdn,qx,cx,crate)
+      implicit none
+      real, intent(in) :: dtpinv,dtp,g1x,rho0,qx,cx,crate,xdn
+      real, parameter :: pi = 3.141592653589793
 
+          zraten = (6./pi)**2*dtpinv*g1x*(rho0*qx/xdn)**2 &
+                     *  crate /((cx + dtp*crate)*cx)
+      end function zraten
+!
+!--------------------------------------------------------------------------
+!
+!  Calculate reflectivity change when only mass changes
+      real function zrateq(dtpinv,dtp,g1x,rho0,xdn,qx,cx,qrate)
+      implicit none
+      real, intent(in) :: dtpinv,dtp,g1x,rho0,qx,cx,qrate,xdn
+      real :: tmp1,tmp2
+      real, parameter :: pi = 3.141592653589793
+
+          tmp1 = qx**2
+          tmp2 = (qx+dtp*qrate)**2
+          zrateq = (6./pi)**2*dtpinv*g1x*(rho0/xdn)**2*(tmp2 - tmp1)/cx
+
+      end function zrateq
+!
+!--------------------------------------------------------------------------
+!
+!  Calculate reflectivity change when both mass and  number change
+      real function zrateqn(dtpinv,dtp,g1x,rho0,xdn,qx,cx,crate,qrate)
+      implicit none
+      real, intent(in) :: dtpinv,dtp,g1x,rho0,qx,cx,crate,xdn,qrate
+      real :: tmp1,tmp2
+      real, parameter :: pi = 3.141592653589793
+
+          tmp1 = qx**2/cx
+          tmp2 = (qx+dtp*qrate)**2/(cx + dtp*crate)
+          zrateqn = (6./pi)**2*dtpinv*g1x*(rho0/xdn)**2*(tmp2 - tmp1)
+
+      end function zrateqn
+!
+!--------------------------------------------------------------------------
+!
