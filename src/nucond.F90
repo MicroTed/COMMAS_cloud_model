@@ -353,7 +353,6 @@
       
       integer :: count
       
-#ifdef NUWRFMODS
 !     Addtion T.Iguchi Y2021 Update
       real, parameter :: mwwater = 0.01801528  ! Molecular weight of water (kg/mol)
       real, parameter :: rhowater = 997.0  ! Density of liquid water (kg/m3)
@@ -373,7 +372,7 @@
 #ifdef COMMAS
       real, external :: Derf
 #endif
-#endif
+
 ! -------------------------------------------------------------------------------
       itile = nxi
       jtile = ny
@@ -436,6 +435,8 @@
 
           IF ( c1 > 0. ) THEN
             ssfilt(ix,jy,kz) = 100.*(an(ix,jy,kz,lv)/c1 - 1.0)  ! from "new" values
+          ELSE
+            ssfilt(ix,jy,kz) = -100.
           ENDIF
 
         ENDDO
@@ -670,6 +671,9 @@
              ccnc(mgs) = an(igs(mgs),jy,kgs(mgs),lccn) + an(igs(mgs),jy,kgs(mgs),lccnuf)
           ELSE
              ccnc(mgs) = an(igs(mgs),jy,kgs(mgs),lccn)
+             IF ( lccna > 1 ) THEN
+               cnuc(mgs) = ccnc(mgs)
+             ENDIF
           ENDIF
 #ifdef NUWRFMODS
         ELSEIF ( lcn_ac > 1 .and. ( ac_opt == 1 .or. ac_opt == 11 ) ) THEN
@@ -727,9 +731,13 @@
        DO mgs = 1,ngscnt
        ! default value of renucfrac is 0.0
         IF ( irenuc /= 6 ) THEN
-        cnuc(mgs) = Max(ccnc(mgs),cwnccn(mgs))*(1. - renucfrac) + ccnc(mgs)*renucfrac
+          IF ( irenuc == 2 ) THEN
+            cnuc(mgs) = Max(ccnc(mgs),cwnccn(mgs))*(1. - renucfrac) + ccnc(mgs)*renucfrac
+          ELSE
+            cnuc(mgs) = ccnc(mgs)*(1. - renucfrac) + ccnc(mgs)*renucfrac
+          ENDIF
         ELSE
-        cnuc(mgs) = Max(ccnc(mgs),cwnccn(mgs))*(1. - renucfrac) + Max(0.0,ccnc(mgs) - ccna(mgs))*renucfrac
+        cnuc(mgs) = ccnc(mgs)*(1. - renucfrac) + Max(0.0,ccnc(mgs) - ccna(mgs))*renucfrac
         ENDIF
         IF ( renucfrac >= 0.999 ) THEN
           IF ( temg(mgs) < 265. ) THEN
@@ -767,19 +775,40 @@
           il = lr
           DO mgs = 1,ngscnt
 
-         IF ( zx(mgs,il) <= zxmin ) THEN
-           qx(mgs,lv) = qx(mgs,lv) + qx(mgs,il)
+         IF ( iresetmoments == 1 .or. iresetmoments == il  .or. iresetmoments == -1 ) THEN
+         IF ( zx(mgs,il) <= zxmin ) THEN !  .and. qx(mgs,il) > 0.05e-3 ) THEN
            qx(mgs,il) = 0.0
            cx(mgs,il) = 0.0
            an(igs(mgs),jgs,kgs(mgs),lv) = an(igs(mgs),jgs,kgs(mgs),lv) + an(igs(mgs),jgs,kgs(mgs),il)
            an(igs(mgs),jgs,kgs(mgs),il) = qx(mgs,il)
            an(igs(mgs),jgs,kgs(mgs),ln(il)) = cx(mgs,il)
-         ELSEIF ( cx(mgs,il) <= 0.0 ) THEN
-           qx(mgs,lv) = qx(mgs,lv) + qx(mgs,il)
+         ELSEIF ( iresetmoments == -1 .and. qx(mgs,il) < qxmin(il) ) THEN
+           zx(mgs,il) = 0.0
+           cx(mgs,il) = 0.0
+           an(igs(mgs),jgs,kgs(mgs),lv) = an(igs(mgs),jgs,kgs(mgs),lv) + an(igs(mgs),jgs,kgs(mgs),il)
+
+           qx(mgs,il) = 0.0
+           an(igs(mgs),jgs,kgs(mgs),il) = qx(mgs,il)
+           an(igs(mgs),jgs,kgs(mgs),ln(il)) = cx(mgs,il)
+           an(igs(mgs),jgs,kgs(mgs),lz(il)) = zx(mgs,il)
+         
+         ELSEIF ( cx(mgs,il) <= cxmin .and. iresetmoments /= -1 ) THEN !  .and. qx(mgs,il) > 0.05e-3  ) THEN
+!!            write(91,*) 'cx=0; qx,zx = ',1000.*qx(mgs,il),1.e18*zx(mgs,il)
            zx(mgs,il) = 0.0
            qx(mgs,il) = 0.0
            an(igs(mgs),jgs,kgs(mgs),lv) = an(igs(mgs),jgs,kgs(mgs),lv) + an(igs(mgs),jgs,kgs(mgs),il)
            an(igs(mgs),jgs,kgs(mgs),il) = qx(mgs,il)
+           an(igs(mgs),jgs,kgs(mgs),lz(il)) = zx(mgs,il)
+         ENDIF
+         ENDIF
+
+         IF (  zx(mgs,il) <= zxmin .and. cx(mgs,il) <= cxmin ) THEN
+           zx(mgs,il) = 0.0
+           cx(mgs,il) = 0.0
+           an(igs(mgs),jgs,kgs(mgs),lv) = an(igs(mgs),jgs,kgs(mgs),lv) + an(igs(mgs),jgs,kgs(mgs),il)
+           qx(mgs,il) = 0.0
+           an(igs(mgs),jgs,kgs(mgs),il) = qx(mgs,il)
+           an(igs(mgs),jgs,kgs(mgs),ln(il)) = cx(mgs,il)
            an(igs(mgs),jgs,kgs(mgs),lz(il)) = zx(mgs,il)
          ENDIF
 
@@ -2420,7 +2449,7 @@
             ssf(mgs) = 100.*(qx(mgs,lv)/c1 - 1.0)  ! from "new" values
           ENDIF
 
-          IF ( ssf(mgs) > 0.0 .or. wvel(mgs) > 0.0 ) THEN
+          IF ( ssf(mgs) > 0.0 .and. wvel(mgs) > 0.0 ) THEN
 
            cpm = cp + cpv*qx(mgs,lv)
            evs = pres(mgs)*qvs(mgs)/0.622
@@ -3145,10 +3174,10 @@
        ELSE
         IF ( il == lc ) THEN
           IF ( ln(il) > 1 ) THEN
-           zerocx(il) = ( an(ix,jy,kz,ln(il)) <= 0.0 ) .and. .not. flag_qndrop ! do not reset if progn=1 (WRF-CHEM)
+           zerocx(il) = ( an(ix,jy,kz,ln(il)) < cxmin ) .and. .not. flag_qndrop ! do not reset if progn=1 (WRF-CHEM)
           ENDIF
         ELSE
-         IF ( ln(il) > 1 ) zerocx(il) = ( an(ix,jy,kz,ln(il)) <= 0.0 )
+         IF ( ln(il) > 1 ) zerocx(il) = ( an(ix,jy,kz,ln(il)) < cxmin )
         ENDIF
        ENDIF
       ENDDO
@@ -3290,6 +3319,7 @@
            hwdn = xdn0(lhl)
          ENDIF
 
+         IF ( ipconc >= 5 .and.  an(ix,jy,kz,lhl) .gt. qxmin(lhl) ) THEN
             qr = an(ix,jy,kz,lhl)
             xvol = dn(ix,jy,kz)*an(ix,jy,kz,lhl)/(hwdn*an(ix,jy,kz,lnhl))
             chw = an(ix,jy,kz,lnhl)
@@ -3299,6 +3329,7 @@
               chw = dn(ix,jy,kz)*an(ix,jy,kz,lhl)/(xvol*hwdn)
               an(ix,jy,kz,lnhl) = chw
              ENDIF
+          ENDIF
        
 !  CHECK INTERCEPT
        IF ( ipconc == 5 .and.  an(ix,jy,kz,lhl) .gt. qxmin(lhl) .and.  alphahl .le. 0.1 .and. lnhl .gt. 1 .and. lzhl == 0 ) THEN
@@ -3449,6 +3480,7 @@
            hwdn = xdn0(lf)
          ENDIF
 
+         IF ( ipconc >= 5 .and.  an(ix,jy,kz,lf) .gt. qxmin(lh) ) THEN
             qr = an(ix,jy,kz,lf)
             xvol = dn(ix,jy,kz)*an(ix,jy,kz,lf)/(hwdn*an(ix,jy,kz,lnf))
             chw = an(ix,jy,kz,lnf)
@@ -3458,6 +3490,7 @@
               chw = dn(ix,jy,kz)*an(ix,jy,kz,lf)/(xvol*hwdn)
               an(ix,jy,kz,lnf) = chw
              ENDIF
+          ENDIF
 
        
        
@@ -3624,6 +3657,7 @@
            hwdn = xdn0(lh)
          ENDIF
 
+         IF ( ipconc >= 5 .and.  an(ix,jy,kz,lh) .gt. qxmin(lh) ) THEN
             qr = an(ix,jy,kz,lh)
             xvol = dn(ix,jy,kz)*an(ix,jy,kz,lh)/(hwdn*an(ix,jy,kz,lnh))
             chw = an(ix,jy,kz,lnh)
@@ -3633,6 +3667,7 @@
               chw = dn(ix,jy,kz)*an(ix,jy,kz,lh)/(xvol*hwdn)
               an(ix,jy,kz,lnh) = chw
              ENDIF
+          ENDIF
 
 !  CHECK INTERCEPT
        IF ( ipconc == 5 .and.  an(ix,jy,kz,lh) .gt. qxmin(lh) .and.  alphah .le. 0.1 .and. lnh .gt. 1 .and. lzh == 0 ) THEN
@@ -3776,7 +3811,7 @@
       end if
 
 !
-!  for qci
+!  for qi
 !
       IF ( (an(ix,jy,kz,li) .le. frac*qxmin(li)) .or. zerocx(li) ) THEN
       an(ix,jy,kz,lv) = an(ix,jy,kz,lv) + an(ix,jy,kz,li)

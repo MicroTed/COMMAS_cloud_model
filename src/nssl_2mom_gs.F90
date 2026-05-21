@@ -4295,9 +4295,17 @@
            IF ( ssi(mgs) <= 1.0 ) THEN
              fac = 0.1
              ehsfac(mgs) = 0.1
-           ELSEIF ( ssi(mgs) <= 1.005 ) THEN
-             fac = Max(0.1, fac*(ssi(mgs) - 1.0)/0.005)
-             ehsfac(mgs) = Max(0.1, (ssi(mgs) - 1.0)/0.005)
+           ELSEIF ( ssi(mgs) <= 1.005 ) THEN ! ssi in range of 1.0 to 1.005
+             fac = 0.1 + (ssi(mgs) - 1.0)*(fac - 0.1)/(1.005 - 1.0) !  Max(0.1, fac*(ssi(mgs) - 1.0)/0.005)
+             ehsfac(mgs) = fac !  Max(0.1, (ssi(mgs) - 1.0)/0.005)
+           ENDIF
+        ELSEIF ( iessopt == 5 ) THEN ! factor based on ice supersat; very roughly based on Hosler et al. 1957 (J. Met.)
+           IF ( ssi(mgs) < 0.90 ) THEN
+             fac = 0.1
+             ehsfac(mgs) = 0.1
+           ELSEIF ( ssi(mgs) < 1.0 ) THEN ! ssi in range of 0.9 to 1.0
+             fac = 0.1 + (ssi(mgs) - 0.9)*(fac - 0.1)/(1.0 - 0.9) 
+             ehsfac(mgs) = fac ! Max(0.1, 0.1*(1.0 - ssi(mgs))/0.1)
            ENDIF
         ENDIF
         
@@ -5780,6 +5788,9 @@
              ratio = 40.e-6/xdia(mgs,lr,1)
            ELSEIF ( iacrsize .eq. 5 ) THEN
              ratio = 150.e-6/xdia(mgs,lr,1)
+           ELSEIF ( iacrsize .eq. 6 ) THEN
+             ratio = 60.e-6/xdia(mgs,lr,1)
+             ni = cx(mgs,li)
            ENDIF
            i = Min(nqiacrratio,Int(ratio*dqiacrratioinv))
            j = Int(Max(0.0,Min(15.,alpha(mgs,lr)))*dqiacralphainv)
@@ -6051,11 +6062,12 @@
         ELSE
           tmp = xdia(mgs,lr,3) - 0.1e-3
         ENDIF
+        tmpdiam = tmp
          
 !    Using collection efficiency factor ec0 to simulate break-up that off-sets self-collection (Zieger 1985; Cohard & Pinty 2000)
 !    ec0 is 1 for rain diameter < 600 microns and then drop off toward zero until diameter of 2mm to represent passive breakup
 !    ec0 does not go negative here (i.e., does not follow other versions that create extra breakup at large rain diameter)
-        IF ( ( tmp .gt. 1.9e-3 .and. irainbreak /= 10 .and. irainbreak /= 20 ) .or. icracr <= 0  ) THEN
+        IF ( ( tmpdiam .gt. 1.9e-3 .and. irainbreak /= 10 .and. irainbreak /= 20 ) .or. icracr <= 0  ) THEN
           ec0(mgs) = 0.0
           cracr(mgs) = 0.0
           IF ( ibincracr == 3 ) THEN
@@ -6066,13 +6078,11 @@
         ELSE
          IF ( dmrauto <= 0 .or.  rho0(mgs)*qx(mgs,lr) > 1.2*xl2p(mgs) ) THEN 
           
-          IF ( xdia(mgs,lr,3) .lt. 6.1e-4 .or. irainbreak == 10 ) THEN
+          IF ( tmpdiam .lt. 6.1e-4 .or. irainbreak == 10 ) THEN
             ec0(mgs) = 1.0
           ELSE
-            ec0(mgs) = Exp( -2500.0*(xdia(mgs,lr,3) - 6.0e-4) )
+            ec0(mgs) = Exp( -2500.0*(tmpdiam - 6.0e-4) )
           ENDIF
-          
-          
 
           IF ( rwrad .ge. 50.e-6 ) THEN
               tmp1 = aa2*cx(mgs,lr)**2*xv(mgs,lr)
@@ -6217,7 +6227,8 @@
 !          zracr(mgs) =  g1x(mgs,lr)*(6.*rho0(mgs)/(pi*1000.))**2*( tmp**2 * cracr(mgs) )
         ! rewrite because original can overestimate zracr if -cracr*dtp is on the order of cx (i.e.,
         !  large increase in the number of drops, which violates differential assumption
-          zracr(mgs) = zraten(dtpinv,dtp,g1x(mgs,lr),rho0(mgs),rho_qr,qx(mgs,lr),cx(mgs,lr),cracr(mgs))
+        ! Pass -cracr because its meaning is backwards (neg. value ADDS number, positive value SUBTRACTS)
+          zracr(mgs) = zraten(dtpinv,dtp,g1x(mgs,lr),rho0(mgs),rho_qr,qx(mgs,lr),cx(mgs,lr),-cracr(mgs))
 
 !          zracr(mgs) = dtpinv*g1x(mgs,lr)*(6.*rho0(mgs)*qx(mgs,lr)/(pi*1000.))**2 &
 !                     * ( cracr(mgs) )/((cx(mgs,lr) - dtp*cracr(mgs))*(cx(mgs,lr)))
@@ -6874,7 +6885,7 @@
            ELSE !{
 
 
-           IF ( ipconc >= 5 .or. lzr > 1 ) THEN
+           IF ( (ipconc >= 5 .or. lzr > 1) ) THEN !{
 
               cxd1 = crfrz(mgs)*dtp
               qxd1 = qrfrz(mgs)*dtp
@@ -6890,6 +6901,7 @@
               ! Do the correction for alphamax
               zrfrz(mgs) = zxd1*dtpinv
               ! tmp4 is the Z from the converted particles assuming shape of alphamax
+              IF ( icorrectfddbz >= 1 .and. zxd1 > 10.*zxmin ) THEN
               tmp3 = g1xmax*(rho0(mgs)*qxd1)**2/((pi*rhofrz/6.0)**2)
               tmp4 = tmp3/cxd1
               IF ( tmp4 > zxd1 ) THEN ! calculate new graupel/fd number to match zxd1
@@ -6898,19 +6910,24 @@
                 cxd1 = tmp3/zxd1
                 crfrzf(mgs) = dtpinv*cxd1
               ENDIF
+              ENDIF
             ELSE
+              IF ( icorrectfddbz >= 1 ) THEN
             ! tmp5 is rain reflectivity moment
               tmp5 = g1x(mgs,lr)*(rho0(mgs)*qx(mgs,lr))**2/((pi*xdn(mgs,lr)/6.)**2*cx(mgs,lr))
               zxd1 = (tmp1 + dely*dqiacralphainv*(tmp2 - tmp1))*tmp5
             ! tmp4 is the reflectivity of the newly-converted graupel particles (use g1x(lh) for loss term)
             ! which we want to match zxd1 to prevent spurious increase in total reflectivity
+              IF ( zxd1 > 10.*zxmin ) THEN
               tmp3 =  g1x(mgs,lr)*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lr)/6.0)**2)
               tmp4 = tmp3/cxd1
               IF ( tmp4 > zxd1 ) THEN ! calculate new FD number to match zxd1
                 crfrzf(mgs) = tmp3/zxd1*dtpinv
               ENDIF
+              ENDIF
+              ENDIF
             ENDIF
-           ENDIF
+           ENDIF !}
 
            
             IF ( ibiggsmallrain > 0 .and. xv(mgs,lr) < 2.*xvmn(lr) .and. ( ibiggsnow == 1 .or. ibiggsnow == 3 ) ) THEN
@@ -6991,6 +7008,51 @@
             zrfrzs(mgs) = zrfrzs(mgs) - zrfrzf(mgs)
             zrfrzf(mgs) = (1000./900.)**2*zrfrzf(mgs)
            ENDIF
+
+           IF ( ( ipconc >= 5 .or. lzr > 1 ) ) THEN !{
+
+              cxd1 = crfrzf(mgs)*dtp
+              qxd1 = qrfrzf(mgs)*dtp
+
+           ! interpolate along x, i.e., ratio; 
+            tmp1 = ziacrratio(i,j) + delx*dqiacrratioinv*(ziacrratio(ip1,j) - ziacrratio(i,j))
+            tmp2 = ziacrratio(i,jp1) + delx*dqiacrratioinv*(ziacrratio(ip1,jp1) - ziacrratio(i,jp1))
+           
+           ! interpolate along alpha; 
+           
+            IF ( ipconc >= 6 .and. lzr > 1  ) THEN !{
+              zxd1 = (tmp1 + dely*dqiacralphainv*(tmp2 - tmp1))*zx(mgs,lr)
+              ! Do the correction for alphamax
+              zrfrz(mgs) = zxd1*dtpinv
+              ! tmp4 is the Z from the converted particles assuming shape of alphamax
+              IF ( icorrectfddbz >= 2  .and. zxd1 > 10.*zxmin ) THEN
+              tmp3 = g1xmax*(rho0(mgs)*qxd1)**2/((pi*rhofrz/6.0)**2)
+              tmp4 = tmp3/cxd1
+              IF ( tmp4 > zxd1 ) THEN ! calculate new graupel/fd number to match zxd1
+                ! increase cxd1 to make z,q,c rates consistent
+                ! cxd1 = g1xmax*(rho0(mgs)*qxd1)**2/(zxd1*(pi*xdn(mgs,lh)/6.0)**2)
+                cxd1 = tmp3/zxd1
+                crfrzf(mgs) = dtpinv*cxd1
+              ENDIF
+              ENDIF
+            ELSE ! }{
+              IF ( icorrectfddbz >= 2  ) THEN
+            ! tmp5 is rain reflectivity moment
+              tmp5 = g1x(mgs,lr)*(rho0(mgs)*qx(mgs,lr))**2/((pi*xdn(mgs,lr)/6.)**2*cx(mgs,lr))
+              zxd1 = (tmp1 + dely*dqiacralphainv*(tmp2 - tmp1))*tmp5
+              IF ( zxd1 > 10.*zxmin ) THEN
+            ! tmp4 is the reflectivity of the newly-converted graupel particles (use g1x(lh) for loss term)
+            ! which we want to match zxd1 to prevent spurious increase in total reflectivity
+              tmp3 =  g1x(mgs,lh)*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lr)/6.0)**2)
+              tmp4 = tmp3/cxd1
+              IF ( tmp4 > zxd1 ) THEN ! calculate new FD number to match zxd1
+                crfrzf(mgs) = tmp3/zxd1*dtpinv
+              ENDIF
+              ENDIF
+              ENDIF
+            ENDIF !}
+           ENDIF !}
+
             ENDIF ! }
            ELSE
             crfrzs(mgs) = 0.0
@@ -7371,8 +7433,6 @@
 ! Hobbs-Rangno ice enhancement (Ferrier, 1994)
 !
       if (ndebug .gt. 0 ) write(0,*) 'conc 23a'
-      dthr = 300.0
-      hrifac = (1.e-3)*((0.044)*(0.01**3))
       do mgs = 1,ngscnt
       ciihr(mgs) = 0.0
       qiihr(mgs) = 0.0
@@ -7380,9 +7440,15 @@
       qicichr(mgs) = 0.0
       cipiphr(mgs) = 0.0
       qipiphr(mgs) = 0.0
+      ENDDO
+
+      dthr = 300.0
+     ! hrifac = (1.e-3)*((0.044)*(0.01**3))
+      hrifac = cimas1
       IF ( ihrn .ge. 1 ) THEN
+      do mgs = 1,ngscnt
       if ( qx(mgs,lc) .gt. qxmin(lc) ) then
-      if ( temg(mgs) .lt. 273.15 ) then
+      if ( temg(mgs) .lt. 265.15 ) then
 !      write(iunit,'(3(1x,i3),3(1x,1pe12.5))')
 !     : igs(mgs),jgs,kgs(mgs),cx(mgs,lc),rho0(mgs),qx(mgs,lc)
 !      write(iunit,'(1pe15.6)')
@@ -7394,10 +7460,10 @@
 !     >  ((1.e-3)*rho0(mgs)*qx(mgs,lc))/(cx(mgs,lc)*(1.e-6)))
 
       IF ( Log(cx(mgs,lc)*(1.e-6)/(3.0)) .gt. 0.0 ) THEN
-      ciihr(mgs) = ((1.69e17)/dthr)   &
+      ciihr(mgs) = ((1.69e17))   &
      & *(log(cx(mgs,lc)*(1.e-6)/(3.0)) *   &
      &  ((1.e-3)*rho0(mgs)*qx(mgs,lc))/(cx(mgs,lc)*(1.e-6)))**(7./3.)
-      ciihr(mgs) = ciihr(mgs)*(1.0e6)
+      ciihr(mgs) = (ciihr(mgs)*(1.0e6) - cx(mgs,li) - cx(mgs,ls))/dthr
       qiihr(mgs) = hrifac*ciihr(mgs)/rho0(mgs)
       qiihr(mgs) = max(qiihr(mgs), 0.0)
       qiihr(mgs) = min(qiihr(mgs),qcmxd(mgs))
@@ -7418,8 +7484,8 @@
 !
       end if
       end if
-      ENDIF ! ihrn
       end do
+      ENDIF ! ihrn
 !
 !
 !
@@ -8284,8 +8350,8 @@
 
       do mgs = 1,ngscnt
       IF ( qx(mgs,lh) .gt. qxmin(lh) ) THEN
+       IF ( icdx /= 6 .and. alpha(mgs,lh) .eq. 0.0 ) THEN
        hwventc = (4.0*gr/(3.0*cdxgs(mgs,lh)))**(0.25)
-       IF ( .false. .or. alpha(mgs,lh) .eq. 0.0 ) THEN
         hwvent(mgs) =   &
      &  ( hwventa + hwventb*hwventc*fvent(mgs)   &
      &    *((xdn(mgs,lh)/rho0(mgs))**(0.25))   &
@@ -8336,9 +8402,9 @@
 !      hwventc = (4.0*gr/(3.0*cdx(lf)))**(0.25)
       do mgs = 1,ngscnt
       IF ( qx(mgs,lf) .gt. qxmin(lf) ) THEN
-      hwventc = (4.0*gr/(3.0*cdxgs(mgs,lf)))**(0.25)
 
-       IF ( .false. .or. alpha(mgs,lf) .eq. 0.0 ) THEN
+       IF ( icdx /= 6 .and. alpha(mgs,lf) .eq. 0.0 ) THEN
+        hwventc = (4.0*gr/(3.0*cdxgs(mgs,lf)))**(0.25)
         fwvent(mgs) =   &
      &  ( hwventa + hwventb*hwventc*fvent(mgs)   &
      &    *((xdn(mgs,lf)/rho0(mgs))**(0.25))   &
@@ -8386,9 +8452,9 @@
 !      hwventc = (4.0*gr/(3.0*cdx(lhl)))**(0.25)
       do mgs = 1,ngscnt
       IF ( qx(mgs,lhl) .gt. qxmin(lhl) ) THEN
-      hwventc = (4.0*gr/(3.0*cdxgs(mgs,lhl)))**(0.25)
 
-       IF ( .false. .or. alpha(mgs,lhl) .eq. 0.0 ) THEN
+       IF ( icdxhl /= 6 .and. alpha(mgs,lhl) .eq. 0.0 ) THEN
+        hwventc = (4.0*gr/(3.0*cdxgs(mgs,lhl)))**(0.25)
         hlvent(mgs) =   &
      &  ( hwventa + hwventb*hwventc*fvent(mgs)   &
      &    *((xdn(mgs,lhl)/rho0(mgs))**(0.25))   &
@@ -11564,6 +11630,7 @@
      &       xdia(mgs,lh,1)*hxventtmp*cx(mgs,lh)*fwet1(mgs)   &
      &     + fwet2(mgs)*(qxacitmp + qxacstmp)
 
+          tmp = qhwet(mgs)
           ! as dry growth but subtract part for D > Dw and add wet growth for D > Dw
           qhwet(mgs) = qhacw(mgs) + qhacr(mgs) + qhaci(mgs) + qhacs(mgs) &
                         - ehi(mgs)*qxacitmp - ehs(mgs)*qxacstmp          &
@@ -12539,6 +12606,7 @@
             zhlcnh(mgs) = dtpinv*zxd1
 
               ! tmp4 is the Z from the converted particles assuming shape of alphamax
+              IF ( icorrecthaildbz >= 1 .and. zxd1 > 10.*zxmin ) THEN
               tmp3 = g1xmax*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lh)/6.0)**2)
               tmp4 = tmp3/cxd1
               IF ( tmp4 > zxd1 ) THEN ! calculate new hail number to match zxd1
@@ -12547,14 +12615,16 @@
                 cxd1 = tmp3/zxd1
                 chlcnhhl(mgs) = dtpinv*cxd1
               ENDIF
+              ENDIF
            ELSE
             zxd1 = 0
            ENDIF
-           IF ( ipconc == 5 ) THEN ! Adjust cxd1 by reflectivity removed from graupel
+           IF ( ipconc == 5 .and. icorrecthaildbz >= 1 ) THEN ! Adjust cxd1 by reflectivity removed from graupel
             tmp3 = gaminterp(ratio,alpha(mgs,lh),11,1)
             ! tmp5 is graupel reflectivity moment
             tmp5 = g1x(mgs,lh)*(rho0(mgs)*qx(mgs,lh))**2/((pi*xdn(mgs,lh)/6.)**2*cx(mgs,lh))
             zxd1 = flim*(tmp3)*tmp5
+            IF ( zxd1 > 10.*zxmin ) THEN
             ! tmp4 is the reflectivity of the newly-converted graupel particles (use g1x(lh) for loss term)
             ! which we want to match zxd1 to prevent spurious increase in total reflectivity
               tmp3 =  g1x(mgs,lh)*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lh)/6.0)**2)
@@ -12570,9 +12640,9 @@
                 cxd1 = tmp3/zxd1
                 chlcnhhl(mgs) = dtpinv*cxd1 ! multiplied later by rzxhlh(mgs)
               ENDIF
+              ENDIF
            ENDIF
 
-            
             ELSE
                qhlcnh(mgs) = 0.0
             ENDIF
@@ -12888,9 +12958,11 @@
 
            ! reflectivity
            IF ( lzf > 1 .and. lzhl > 1 ) THEN
+            tmp = chlcnfhl(mgs) 
             tmp3 = gaminterp(ratio,alpha(mgs,lf),11,1)
             zxd1 = zx(mgs,lf)*(tmp3)
             zhlcnf(mgs) = flim*dtpinv*zxd1
+              IF ( icorrecthaildbz >= 1 .and. zxd1 > 10.*zxmin) THEN
               ! tmp4 is the Z from the converted particles assuming shape of alphamax
               tmp3 = g1xmax*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lf)/6.0)**2)
               tmp4 = tmp3/cxd1 ! g1xmax*(rho0(mgs)*qxd1)**2/(cxd1*(pi*xdn(mgs,lf)/6.0)**2)
@@ -12900,15 +12972,17 @@
                 cxd1 = tmp3/zxd1
                 chlcnfhl(mgs) = dtpinv*cxd1
               ENDIF
+              ENDIF
            ELSE
             zxd1 = 0
            ENDIF
 
-           IF ( ipconc == 5 ) THEN ! Adjust cxd1 by reflectivity removed from graupel
+           IF ( ipconc == 5 .and. icorrecthaildbz >= 1 ) THEN ! Adjust cxd1 by reflectivity removed from graupel
             tmp3 = gaminterp(ratio,alpha(mgs,lf),11,1)
             ! tmp5 is FD reflectivity moment (note that alphah is used for FD)
             tmp5 = g1x(mgs,lh)*(rho0(mgs)*qx(mgs,lf))**2/((pi*xdn(mgs,lf)/6.)**2*cx(mgs,lf))
             zxd1 = flim*(tmp3)*tmp5
+            IF ( zxd1 > zxmin ) THEN
             ! tmp4 is the reflectivity of the newly-converted graupel particles (use g1x(lh) for loss term)
             ! which we want to match zxd1 to prevent spurious increase in total reflectivity
               tmp3 = g1x(mgs,lh)*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lf)/6.0)**2)
@@ -12923,6 +12997,7 @@
                ! cxd1 = g1x(mgs,lh)*(rho0(mgs)*qxd1)**2/(zxd1*(pi*xdn(mgs,lf)/6.0)**2)
                 cxd1 = tmp3/zxd1
                 chlcnfhl(mgs) = dtpinv*cxd1 ! multiplied later by rzxhlh(mgs)
+              ENDIF
               ENDIF
            ENDIF
 
@@ -13567,7 +13642,7 @@
 !
 !  Meyers et al. (1992; JAS) and Ferrier (1994) primary ice nucleation
 !
-      cmassin = cimasn  ! 6.88e-13
+      cmassin = cimas1  ! 6.88e-13
       do mgs = 1,ngscnt
       qiint(mgs) = 0.0
       ciint(mgs) = 0.0
@@ -13905,7 +13980,7 @@
        pchld(:) = 0.0
 !       ENDDO
 !
-!  Cloud ice
+!  Cloud ice (columns)
 !
 !      IF ( ipconc .ge. 1 ) THEN
       if (ndebug .gt. 0 ) write(0,*) 'cloud ice sum'
@@ -15898,7 +15973,7 @@
         
         ENDIF
 
-         pzrwi(mgs) = zrcnw(mgs) + zracw(mgs) + zracr(mgs) &
+         pzrwi(mgs) = zrcnw(mgs) + zracw(mgs) + Max(0.0,zracr(mgs)) &
      &    + Max( 0.,zrcev(mgs) )  &
      &  - (1-il5(mgs))*zsmlrr(mgs)   &
      &  - zsshrr(mgs)   &
@@ -15910,7 +15985,7 @@
      &  - zhlshrr(mgs)   
 
 
-         pzrwd(mgs) = 0.0   &
+         pzrwd(mgs) = Min(0.0,zracr(mgs))   &
      &   +  Min(0.,zrcev(mgs) )  &
      &    - zrach(mgs)  &
      &    - zrachl(mgs)  &
@@ -16363,7 +16438,7 @@
 
 
       write(iunit,*)  'rain cx,xv : ',cx(mgs,lr),xv(mgs,lr)
-      write(iunit,*)  'temcg = ', temcg(mgs)
+      write(iunit,*)  'temcg, w = ', temcg(mgs),wvel(mgs)
 
       write(iunit,*) 'v ', pqwvi(mgs) ,pqwvd(mgs)
       write(iunit,*) 'c ', pqcwi(mgs) ,pqcwd(mgs)
@@ -16717,6 +16792,7 @@
      & +qhacr(mgs) + qhlacr(mgs)  ) 
       psub(mgs) =  0.0 +  &
      &   il5(mgs)*(   &
+     &  + qsdpv(mgs)   &
      &  + qhdpv(mgs)   &
      &  + qhldpv(mgs)    &
      &  + qidpv(mgs) + qisbv(mgs) )   &
@@ -19783,8 +19859,12 @@
       real, intent(in) :: dtpinv,dtp,g1x,rho0,qx,cx,crate,xdn
       real, parameter :: pi = 3.141592653589793
 
+        IF ( cx > 1.e-8 ) THEN
           zraten = (6./pi)**2*dtpinv*g1x*(rho0*qx/xdn)**2 &
                      *  crate /((cx + dtp*crate)*cx)
+        ELSE
+          zraten = 0.0
+        ENDIF
       end function zraten
 !
 !--------------------------------------------------------------------------
@@ -19796,9 +19876,13 @@
       real :: tmp1,tmp2
       real, parameter :: pi = 3.141592653589793
 
+        IF ( cx > 1.e-8 ) THEN
           tmp1 = qx**2
           tmp2 = (qx+dtp*qrate)**2
           zrateq = (6./pi)**2*dtpinv*g1x*(rho0/xdn)**2*(tmp2 - tmp1)/cx
+        ELSE
+          zrateq = 0.0
+        ENDIF
 
       end function zrateq
 !
@@ -19808,12 +19892,24 @@
       real function zrateqn(dtpinv,dtp,g1x,rho0,xdn,qx,cx,crate,qrate)
       implicit none
       real, intent(in) :: dtpinv,dtp,g1x,rho0,qx,cx,crate,xdn,qrate
+      integer :: ioldnew = 1
       real :: tmp1,tmp2
       real, parameter :: pi = 3.141592653589793
 
+        IF ( cx > 1.e-8 ) THEN
+          IF ( ioldnew == 1 .and. cx + dtp*crate > 1.e-8 .and. qx+dtp*qrate > 0. ) THEN
+          ! final-initial
           tmp1 = qx**2/cx
           tmp2 = (qx+dtp*qrate)**2/(cx + dtp*crate)
           zrateqn = (6./pi)**2*dtpinv*g1x*(rho0/xdn)**2*(tmp2 - tmp1)
+          ELSE
+          ! differential form
+           tmp1 = qx/cx
+           zrateqn = (6./pi)**2*g1x*(rho0/xdn)**2*( 2.*tmp1*qrate - tmp1**2 * crate )
+          ENDIF
+        ELSE
+          zrateqn = 0.0
+        ENDIF
 
       end function zrateqn
 !

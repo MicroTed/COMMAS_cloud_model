@@ -176,7 +176,9 @@
                                  ! =2 turn on for graupel density less than 300. only 
   integer  :: iusewetsnow = 0 ! =1 to turn on use of QSW for snow reflectivity (only for ZVDM -- mixedphase)
                                  ! =2 turn on for snow density less than 300. only 
-
+  integer  :: icorrecthaildbz = 1 ! =1 to adjust hail number conc. from gr->hl conversion to keep correct Z
+  integer  :: icorrectfddbz = 1 ! =1 to adjust graupel/FD number conc. from rain freezing to keep correct Z
+  
   real    :: rhofrz = 900 ! density of freezing drops
   real    :: ifrzg = 1.0 ! fraction of frozen drops (Bigg freezing) going to graupel. 1=freeze all rain to graupel, 0=freeze all to hail
   real    :: ifiacrg = 1.0 ! fraction of frozen drops (3-component freezing qiacr) going to graupel. 1=freeze all rain to graupel, 0=freeze all to hail
@@ -220,7 +222,7 @@
   logical :: luseccn = .true.  ! = true to use predicted CCN
                              ! = false to use constant background
   logical, parameter :: invertccn = .false. ! =true for base state of ccn=0, =false for ccn initialized in the base state
-  logical :: restoreccn = .false. ! whether or not to restore CCN when droplets evaporate and nudge CCN back to base state (qccn) (only applies if CCNA is NOT predicted)
+  logical :: restoreccn = .true.  ! whether or not to restore CCN when droplets evaporate and nudge CCN back to base state (qccn) (only applies if CCNA is NOT predicted)
                                   ! Refs: Takahashi (1973, JGR), Feingold et al. (1996, JGR), Lebo and Seinfeld (2011, ACP), Xue et al. (2010, JAS)
   real    :: ccntimeconst = 3600.  ! time constant for CCN restore (either for CCNA or when restoreccn = true)
   real    :: restoreccnfrac = 1.0  ! fraction of evaporated droplets that restore CCN
@@ -265,7 +267,7 @@
   real    :: cimas0 = 6.62e-11   ! default mass (kg) of Hallett-Mossop crystals
                                  ! 6.62e-11kg results in half the diam. (60 microns) of old default value of 5.0e-10
   real    :: cimas1 = 6.88e-13   ! default mass (kg) of new ice crystals
-  real    :: splintermass = 6.88e-13
+  real    :: splintermass = 6.88e-13 ! kg
   real    :: cfnfac = 0.1        ! Hack factor that goes with icfn=1
   integer :: iscni = 4           ! default option for ice crystal aggregation/conversion to snow
   real    :: fscni = 1.0         ! factor for calculating cscni
@@ -315,9 +317,9 @@
   real    :: esi0 = 0.1              ! linear factor in snow-ice collection efficiency
   real    :: ehs0 = 0.1 ,ehs1 = 0.1  ! graupel/hail-snow sticking eff. parameters: ehs0*exp(ehs1*min(temcg(mgs),0.0))
                                      ! set ehs1 = 0 to get a constant value of ehs0
-  integer :: iessopt = 4  ! 1 = Original (no factor); 2 = factor based on wvel; 3 = factor based on SSI (fac=0 for undersat);
+  integer :: iessopt = 1  ! 1 = Original (no factor); 2 = factor based on wvel; 3 = factor based on SSI (fac=0 for undersat);
                           ! 4 = as 3 but sets min factor of 0.1 and goes to full value at 0.5% SSI
-  real    :: ess0 = 1.0 ,ess1 = 0.05 ! snow aggregation coefficients: ess0*exp(ess1*min(temcg(mgs),0.0))
+  real    :: ess0 = 0.5 ,ess1 = 0.05 ! snow aggregation coefficients: ess0*exp(ess1*min(temcg(mgs),0.0))
                                      ! set ess1 = 0 to get a constant value of ess0
       ! Note: for Takahashi, must set takessopt=2 to use esstem1/esstem2
   real    :: esstem1 = -15.  ! lower temperature where snow aggregation turns on
@@ -377,6 +379,8 @@
 
   integer :: nsplinter = 0  ! number of ice splinters per freezing drop, if negative, then per resulting graupel particle
                             ! Set nslpinter >= 1000 to turn on Lawson 2015 splintering option
+                            ! nslpinter = 1001 (NSSL) applies temperature-based factor from Sullivan et al. 2018
+                            ! nslpinter = 1000 (TAK) applies temperature-based factor from Sullivan et al. 2018
   real    :: lawson_splinter_fac = 2.5e-11  ! constant in Lawson et al. (2015, JAS) for ice particle production from freezing drops
   integer :: isnwfrac = 0   ! 0= no snow fragmentation; 1 = turn on snow fragmentation (Schuur, 2000)
 
@@ -461,7 +465,7 @@
                                 ! 2 = (recommended) as for 1, but apply factor of 1-ec0 to turn off a smaller diameter (ec0 is rain self-coll factor)
                                 ! 10 = as for 1, but sets ec0=1 for rain self-collection (i.e., no passive breakup); set higher rainbreakfac for this option
                                 ! 11 = breakup for DSD tail only; uses draintail etc.
-  real    :: rainbreakfac   = 1.0e6 ! 2.0e6 for lower hand fit; 2.542e6 for 'best' fit
+  real    :: rainbreakfac   = 2.5e6 ! 2.0e6 for lower hand fit; 2.542e6 for 'best' fit
   real    :: draintail      = 10.e-3 ! starting size for rain breakup (irainbreak = 11)
   real    :: drsmall        = 1.e-3 ! size of small drops from breakup (irainbreak = 11)
   real    :: qrbrthresh1    = 0.1e-3 ! lower threshold rain content (kg/m^3) for large drop breakup (irainbreak=11)

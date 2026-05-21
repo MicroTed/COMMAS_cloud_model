@@ -72,7 +72,7 @@ MODULE PARAM_MODULE
 !  atypes1 (scalars) and atypem1 (momentum) are for the first steps
 !  atypes2 (scalars) and atypem2 (momentum) are for the last step
 
-      integer :: atypes1 = 0
+      integer :: atypes1 = 13
       integer :: atypes2 = 1
 
       integer :: atype2qv = 1
@@ -129,7 +129,7 @@ MODULE PARAM_MODULE
       integer            :: icrwmp          = 1             ! Crowley: 1=1pass, 2=2-pass
       integer            :: icrwmn          = 1             ! Crowley monotonic filter: 0=off, 1=on
       integer            :: icrwmn1st       = 1             ! 1st order Crowley monotonic filter: 0=off, 1=on
-      real               :: ainflo          = 0.0           ! set to >0 (e.g. 0.5) to turn on inflow nudging
+      real               :: ainflo          = 0.5           ! set to >0 (e.g. 0.5) to turn on inflow nudging
                                                             !   for scalars that have base state of 0 (e.g., hydrometeor mixing ratios)
       real               :: ainfloqv        = 0.0           ! set to >0 (e.g. 0.5) to turn on inflow nudging
       real               :: ainflom         = 0.0           ! set to >0 (e.g. 0.5) to turn on inflow nudging for momentum (parallel component)
