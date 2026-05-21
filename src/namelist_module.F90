@@ -820,6 +820,7 @@ NAMELIST /output_options/               &
                         iusewetgraupel, &
                         iusewethail,    &
                         iusewetsnow,    &
+                        icorrecthaildbz, icorrectfddbz, &
                         idbzci,         &
                         cimn, cimx,     &
                         vtmaxsed,       &
@@ -1047,6 +1048,7 @@ NAMELIST /output_options/               &
                         iusewetgraupel, &
                         iusewethail,    &
                         iusewetsnow,    &
+                        icorrecthaildbz, icorrectfddbz, &
                         idbzci,         &
                         vtmaxsed,       &
                         itfall,iscfall, &
@@ -1236,6 +1238,7 @@ NAMELIST /output_options/               &
                         iusewetgraupel, &
                         iusewethail,    &
                         iusewetsnow,    &
+                        icorrecthaildbz, icorrectfddbz, &
                         idbzci,         &
                         cimn, cimx,     &
                         vtmaxsed,       &
