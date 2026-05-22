@@ -6901,7 +6901,7 @@
               ! Do the correction for alphamax
               zrfrz(mgs) = zxd1*dtpinv
               ! tmp4 is the Z from the converted particles assuming shape of alphamax
-              IF ( icorrectfddbz >= 1 .and. zxd1 > 10.*zxmin ) THEN
+              IF ( icorrectfddbz >= 1 .and. zxd1 > zxmincorr .and. cxd1 > cxmincorr ) THEN
               tmp3 = g1xmax*(rho0(mgs)*qxd1)**2/((pi*rhofrz/6.0)**2)
               tmp4 = tmp3/cxd1
               IF ( tmp4 > zxd1 ) THEN ! calculate new graupel/fd number to match zxd1
@@ -6918,7 +6918,7 @@
               zxd1 = (tmp1 + dely*dqiacralphainv*(tmp2 - tmp1))*tmp5
             ! tmp4 is the reflectivity of the newly-converted graupel particles (use g1x(lh) for loss term)
             ! which we want to match zxd1 to prevent spurious increase in total reflectivity
-              IF ( zxd1 > 10.*zxmin ) THEN
+              IF ( zxd1 > zxmincorr .and. cxd1 > cxmincorr ) THEN
               tmp3 =  g1x(mgs,lr)*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lr)/6.0)**2)
               tmp4 = tmp3/cxd1
               IF ( tmp4 > zxd1 ) THEN ! calculate new FD number to match zxd1
@@ -7025,7 +7025,7 @@
               ! Do the correction for alphamax
               zrfrz(mgs) = zxd1*dtpinv
               ! tmp4 is the Z from the converted particles assuming shape of alphamax
-              IF ( icorrectfddbz >= 2  .and. zxd1 > 10.*zxmin ) THEN
+              IF ( icorrectfddbz >= 2  .and. zxd1 > zxmincorr .and. cxd1 > cxmincorr ) THEN
               tmp3 = g1xmax*(rho0(mgs)*qxd1)**2/((pi*rhofrz/6.0)**2)
               tmp4 = tmp3/cxd1
               IF ( tmp4 > zxd1 ) THEN ! calculate new graupel/fd number to match zxd1
@@ -7040,7 +7040,7 @@
             ! tmp5 is rain reflectivity moment
               tmp5 = g1x(mgs,lr)*(rho0(mgs)*qx(mgs,lr))**2/((pi*xdn(mgs,lr)/6.)**2*cx(mgs,lr))
               zxd1 = (tmp1 + dely*dqiacralphainv*(tmp2 - tmp1))*tmp5
-              IF ( zxd1 > 10.*zxmin ) THEN
+              IF ( zxd1 > zxmincorr .and. cxd1 > cxmincorr ) THEN
             ! tmp4 is the reflectivity of the newly-converted graupel particles (use g1x(lh) for loss term)
             ! which we want to match zxd1 to prevent spurious increase in total reflectivity
               tmp3 =  g1x(mgs,lh)*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lr)/6.0)**2)
@@ -12606,7 +12606,14 @@
             zhlcnh(mgs) = dtpinv*zxd1
 
               ! tmp4 is the Z from the converted particles assuming shape of alphamax
-              IF ( icorrecthaildbz >= 1 .and. zxd1 > 10.*zxmin ) THEN
+              IF ( icorrecthaildbz >= 1 .and. zxd1 > zxmincorr .and. cxd1 > cxmincorr ) THEN
+              IF ( .true. ) THEN
+               ! tmp3 is cx that is consistent with increased q and Z
+          !   g1x(mgs,lhl) = (pi*xdn(mgs,lhl))**2*zx(mgs,lhl)*cx(mgs,lhl)/((6.*rho0(mgs)*qx(mgs,lhl))**2)
+               tmp3 = g1x(mgs,lhl)*(rho0(mgs)*(qx(mgs,lhl)+qxd1))**2/((pi*xdn(mgs,lhl)/6.0)**2*(zx(mgs,lhl)+zxd1) )
+               chlcnhhl(mgs) = dtpinv*Max(0.0, tmp3 - cx(mgs,lhl) )
+              ELSE
+              ! old version
               tmp3 = g1xmax*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lh)/6.0)**2)
               tmp4 = tmp3/cxd1
               IF ( tmp4 > zxd1 ) THEN ! calculate new hail number to match zxd1
@@ -12616,6 +12623,7 @@
                 chlcnhhl(mgs) = dtpinv*cxd1
               ENDIF
               ENDIF
+              ENDIF ! t/f
            ELSE
             zxd1 = 0
            ENDIF
@@ -12624,7 +12632,19 @@
             ! tmp5 is graupel reflectivity moment
             tmp5 = g1x(mgs,lh)*(rho0(mgs)*qx(mgs,lh))**2/((pi*xdn(mgs,lh)/6.)**2*cx(mgs,lh))
             zxd1 = flim*(tmp3)*tmp5
-            IF ( zxd1 > 10.*zxmin ) THEN
+            IF ( zxd1 > zxmincorr .and. cxd1 > cxmincorr ) THEN
+              IF ( .true. ) THEN
+               ! tmp3 is cx that is consistent with increased q and Z
+          !   g1x(mgs,lhl) = (pi*xdn(mgs,lhl))**2*zx(mgs,lhl)*cx(mgs,lhl)/((6.*rho0(mgs)*qx(mgs,lhl))**2)
+               IF ( cx(mgs,lhl) > cxmin ) THEN
+               ! hail reflectivity
+                 tmp = g1x(mgs,lhl)*(rho0(mgs)*qx(mgs,lhl))**2/((pi*xdn(mgs,lhl)/6.)**2*cx(mgs,lhl))
+               ELSE
+                 tmp = 0.
+               ENDIF
+               tmp3 = g1x(mgs,lhl)*(rho0(mgs)*(qx(mgs,lhl)+qxd1))**2/((pi*xdn(mgs,lhl)/6.0)**2*(tmp+zxd1) )
+               chlcnhhl(mgs) = dtpinv*Max(0.0, tmp3 - cx(mgs,lhl) )
+              ELSE
             ! tmp4 is the reflectivity of the newly-converted graupel particles (use g1x(lh) for loss term)
             ! which we want to match zxd1 to prevent spurious increase in total reflectivity
               tmp3 =  g1x(mgs,lh)*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lh)/6.0)**2)
@@ -12640,6 +12660,7 @@
                 cxd1 = tmp3/zxd1
                 chlcnhhl(mgs) = dtpinv*cxd1 ! multiplied later by rzxhlh(mgs)
               ENDIF
+              ENDIF ! t/f
               ENDIF
            ENDIF
 
@@ -12962,7 +12983,12 @@
             tmp3 = gaminterp(ratio,alpha(mgs,lf),11,1)
             zxd1 = zx(mgs,lf)*(tmp3)
             zhlcnf(mgs) = flim*dtpinv*zxd1
-              IF ( icorrecthaildbz >= 1 .and. zxd1 > 10.*zxmin) THEN
+              IF ( icorrecthaildbz >= 1 .and. zxd1 > zxmincorr .and. cxd1 > cxmincorr ) THEN
+              IF ( .true. ) THEN
+               ! tmp3 is cx that is consistent with increased q and Z
+               tmp3 = g1x(mgs,lhl)*(rho0(mgs)*(qx(mgs,lhl)+qxd1))**2/((pi*xdn(mgs,lhl)/6.0)**2*(zx(mgs,lhl)+zxd1) )
+               chlcnfhl(mgs) = dtpinv*Max(0.0, tmp3 - cx(mgs,lhl) )
+              ELSE
               ! tmp4 is the Z from the converted particles assuming shape of alphamax
               tmp3 = g1xmax*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lf)/6.0)**2)
               tmp4 = tmp3/cxd1 ! g1xmax*(rho0(mgs)*qxd1)**2/(cxd1*(pi*xdn(mgs,lf)/6.0)**2)
@@ -12971,6 +12997,7 @@
                 ! cxd1 = g1xmax*(rho0(mgs)*qxd1)**2/(zxd1*(pi*xdn(mgs,lf)/6.0)**2)
                 cxd1 = tmp3/zxd1
                 chlcnfhl(mgs) = dtpinv*cxd1
+              ENDIF
               ENDIF
               ENDIF
            ELSE
@@ -12982,9 +13009,20 @@
             ! tmp5 is FD reflectivity moment (note that alphah is used for FD)
             tmp5 = g1x(mgs,lh)*(rho0(mgs)*qx(mgs,lf))**2/((pi*xdn(mgs,lf)/6.)**2*cx(mgs,lf))
             zxd1 = flim*(tmp3)*tmp5
-            IF ( zxd1 > zxmin ) THEN
+            IF ( zxd1 > zxmincorr .and. cxd1 > cxmincorr ) THEN
+            IF ( .true. ) THEN
+               IF ( cx(mgs,lhl) > cxmin ) THEN
+               ! hail reflectivity
+                 tmp = g1x(mgs,lhl)*(rho0(mgs)*qx(mgs,lhl))**2/((pi*xdn(mgs,lhl)/6.)**2*cx(mgs,lhl))
+               ELSE
+                 tmp = 0.
+               ENDIF
+               tmp3 = g1x(mgs,lhl)*(rho0(mgs)*(qx(mgs,lhl)+qxd1))**2/((pi*xdn(mgs,lhl)/6.0)**2*(tmp+zxd1) )
+               chlcnfhl(mgs) = dtpinv*Max(0.0, tmp3 - cx(mgs,lhl) )
+            ELSE
             ! tmp4 is the reflectivity of the newly-converted graupel particles (use g1x(lh) for loss term)
             ! which we want to match zxd1 to prevent spurious increase in total reflectivity
+
               tmp3 = g1x(mgs,lh)*(rho0(mgs)*qxd1)**2/((pi*xdn(mgs,lf)/6.0)**2)
               tmp4 = tmp3/cxd1
               IF ( tmp4 > zxd1 ) THEN ! calculate new hail number to match zxd1
@@ -12998,6 +13036,7 @@
                 cxd1 = tmp3/zxd1
                 chlcnfhl(mgs) = dtpinv*cxd1 ! multiplied later by rzxhlh(mgs)
               ENDIF
+              ENDIF ! t/f
               ENDIF
            ENDIF
 
@@ -18939,9 +18978,9 @@
 !          IF ( lqdep   >= 1 ) axtra(igs(mgs),jy,kgs(mgs),lqdep  ) = psub(mgs)
 !          IF ( lqmelt  >= 1 ) axtra(igs(mgs),jy,kgs(mgs),lqmelt ) = pfrz(mgs)
 !          IF ( lqsub   >= 1 ) axtra(igs(mgs),jy,kgs(mgs),lqsub  ) = pvap(mgs)
-          IF ( lchlcnh >= 1 ) axtra(igs(mgs),jy,kgs(mgs),lchlcnh ) = chlcnh(mgs)
-!          IF ( lchlcnh >= 1 ) axtra(igs(mgs),jy,kgs(mgs),lchlcnh ) = &
-!                       axtra(igs(mgs),jy,kgs(mgs),lchlcnh )  + chlcnh(mgs)*dtp/thistory ! chlcnhhl(mgs)*dtp/thistory
+!          IF ( lchlcnh >= 1 ) axtra(igs(mgs),jy,kgs(mgs),lchlcnh ) = chlcnh(mgs)
+          IF ( lchlcnh >= 1 ) axtra(igs(mgs),jy,kgs(mgs),lchlcnh ) = &
+                       axtra(igs(mgs),jy,kgs(mgs),lchlcnh )  + chlcnhhl(mgs)*dtp/thistory ! chlcnhhl(mgs)*dtp/thistory
           IF ( ldhlcnh >= 1 .and. dg0(mgs) > 0. ) axtra(igs(mgs),jy,kgs(mgs),ldhlcnh ) = dg0(mgs)*1000.
 
           IF ( lswagg  >= 1 ) axtra(igs(mgs),jy,kgs(mgs),lswagg  ) = csacs(mgs)

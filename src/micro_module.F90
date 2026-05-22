@@ -178,6 +178,8 @@
                                  ! =2 turn on for snow density less than 300. only 
   integer  :: icorrecthaildbz = 1 ! =1 to adjust hail number conc. from gr->hl conversion to keep correct Z
   integer  :: icorrectfddbz = 1 ! =1 to adjust graupel/FD number conc. from rain freezing to keep correct Z
+  real     :: zxmincorr = 1.e-15 ! minimum Z to run correction to C
+  real     :: cxmincorr = 1.e-3 ! minimum C to run correction to C
   
   real    :: rhofrz = 900 ! density of freezing drops
   real    :: ifrzg = 1.0 ! fraction of frozen drops (Bigg freezing) going to graupel. 1=freeze all rain to graupel, 0=freeze all to hail

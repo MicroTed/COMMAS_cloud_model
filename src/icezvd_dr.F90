@@ -2067,6 +2067,9 @@
           IF ( idhl      >= 1 ) axtra(:,:,:,idhl    ) = 0.
           IF ( idmhl     >= 1 ) axtra(:,:,:,idmhl   ) = 0.
           IF ( idnhl     >= 1 ) axtra(:,:,:,idnhl   ) = 0.
+          IF ( ld0       >= 1 ) axtra(:,:,:,ld0     ) = 0.
+          IF ( lchlcnh   >= 1 ) axtra(:,:,:,lchlcnh ) = 0.
+          IF ( lchlcnf   >= 1 ) axtra(:,:,:,lchlcnf ) = 0.
          ENDIF
 
       IF ( itfall .ne. 3 ) THEN
