@@ -3189,7 +3189,8 @@
 
         an(ix,jy,kz,lzhl) = Max(0.0, an(ix,jy,kz,lzhl) )
         
-        IF ( an(ix,jy,kz,lhl) .ge. frac*qxmin(lhl) .and. rescale_low_alpha ) THEN ! check 6th moment
+        IF ( an(ix,jy,kz,lhl) .ge. frac*qxmin(lhl) .and.  &
+              rescale_low_alpha .and. rescale_low_alphahl ) THEN ! check 6th moment
           
           IF ( an(ix,jy,kz,lnhl) .gt. 0.0 ) THEN
 
@@ -3361,7 +3362,8 @@
 
         an(ix,jy,kz,lzf) = Max(0.0, an(ix,jy,kz,lzf) )
         
-        IF ( .false. .and. an(ix,jy,kz,lf) .ge. frac*qxmin(lf) .and. rescale_low_alpha  ) THEN
+        IF ( .false. .and. an(ix,jy,kz,lf) .ge. frac*qxmin(lf) .and. &
+               rescale_low_alpha .and. rescale_low_alphah  ) THEN
           
           IF ( an(ix,jy,kz,lnf) .gt. 0.0 ) THEN
 
@@ -3528,7 +3530,8 @@
 
         an(ix,jy,kz,lzh) = Max(0.0, an(ix,jy,kz,lzh) )
         
-        IF ( .false. .and. an(ix,jy,kz,lh) .ge. frac*qxmin(lh) .and. rescale_low_alpha ) THEN
+        IF ( .false. .and. an(ix,jy,kz,lh) .ge. frac*qxmin(lh) .and. & 
+              rescale_low_alpha .and. rescale_low_alphah ) THEN
           
           IF ( an(ix,jy,kz,lnh) .gt. 0.0 ) THEN
 
