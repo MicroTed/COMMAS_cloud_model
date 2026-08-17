@@ -2882,8 +2882,8 @@
 !      END DO
 !      END DO
 
-#ifdef CHGELEC
 #ifdef MPI
+#ifdef CHGELEC
      
       IF ( ipelec .ge. 1 ) THEN
 
@@ -2993,6 +2993,8 @@
       ENDIF
 
       ENDIF ! ipelec
+! endif for chgelec:
+#endif /* chgelec */
       
       allocate( mpitotinth((nzend),6))
       allocate(mpitotoutth((nzend),6))
@@ -3029,6 +3031,7 @@
 
 #endif
       
+#ifdef CHGELEC
       IF ( ipelec .ge. 1 ) THEN
 
       IF ( my_rank == 0 ) THEN
@@ -3061,7 +3064,7 @@
       ENDIF ! ipelec
 
 ! endif for chgelec:
-#endif
+#endif /* chgelec */
 
 #ifdef MPI
 
@@ -3402,14 +3405,14 @@
 !      write(0,*) 'mpitotinth k-1,k: ', my_rank, mpitotinth(1,k-1),mpitotinth(1,k)
 
       ! first sum columns 1-11
-      n = (k0-1)*(nzend)
+      n = (k0)*(nzend)
 
       CALL MPI_Reduce(mpitotinth, mpitotoutth, n, MPI_DOUBLE_PRECISION, MPI_SUM, 0, my_comm, mpi_error_code)
 
-      ! column 12 is a max function
+      ! column 12 is a max function -- overwrites outth
       n = nzend
       
-      CALL MPI_Reduce(mpitotinth(1,k0), mpitotoutth(1,k0), n, MPI_DOUBLE_PRECISION, MPI_MAX, 0, my_comm, mpi_error_code)
+      CALL MPI_Reduce(mpitotinth(1,12), mpitotoutth(1,12), n, MPI_DOUBLE_PRECISION, MPI_MAX, 0, my_comm, mpi_error_code)
 
       ! then sum the rest of the columns
       n = (numproc)*(nzend)
@@ -3543,7 +3546,7 @@
       DO kz=kze,kzb,-1
       tmp = 0.0
       IF ( grv(kz) .gt. 1.e-20 ) tmp = grms(kz)/grv(kz)
-      write(3,'(1x,i3,19(2x,1pe13.5))' )  &
+      write(3,'(1x,i3,20(2x,1pe13.5))' )  &
      & kz, udmf(kz), uicmf(kz), grvol(kz), hlvol(kz),  &
      & grms(kz), hlms(kz), ticms(kz), rnms(kz),swms(kz),iwcmx(kz),grvol1(kz),hlvol1(kz),  &
      & grv(kz),hlv(kz),tmp,udke(kz),ddke(kz),grpotc(kz),grpotp(kz),fdms(kz)
