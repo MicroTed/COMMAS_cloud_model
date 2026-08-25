@@ -121,7 +121,7 @@ MODULE DUALPARA
   REAL :: hl_miss 
   
   LOGICAL :: firstcall = .true.
-  INTEGER :: grpl_ON
+  INTEGER :: grpl_ON, snow_ON
   INTEGER :: hl_ON 
   INTEGER :: qgh_opt
 
@@ -269,7 +269,7 @@ MODULE DUALPARA
 !@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
   CONTAINS
 
-  SUBROUTINE setgrplhl(graupel_ON, hail_ON)
+  SUBROUTINE setgrplhl(graupel_ON, hail_ON, wetsnow_ON)
 !-----------------------------------------------------------------------
 !
 ! PURPOSE:
@@ -285,10 +285,11 @@ MODULE DUALPARA
 !-----------------------------------------------------------------------
   IMPLICIT NONE
 
-  INTEGER :: graupel_ON, hail_ON
+  INTEGER :: graupel_ON, hail_ON, wetsnow_ON
 
   grpl_ON = graupel_ON
   hl_ON = hail_ON
+  snow_ON = wetsnow_ON
 
   RETURN
 
@@ -1339,7 +1340,7 @@ SUBROUTINE fractionWaterD14(MPflg,ii,jj,kk,fos,rhoa,tairC,qr,qs,qg,qh,ntr,nts,nt
 !-----------------------------------------------------------------------
 
   ! For snow, use old Jung et al. (2008) method
-  IF (qs > qmin) CALL fractionWater(frs*qr,qs,fos,rhos,fracqrs,fracqs,fms,fws,rhoms)
+  IF (qs > qmin .and. snow_ON == 1) CALL fractionWater(frs*qr,qs,fos,rhos,fracqrs,fracqs,fms,fws,rhoms)
   IF (qg > qmin .and. frg > 0. .and. grpl_ON == 1) THEN ! Iterate to find the water fraction on graupel
     dmr = (6.*rhoa*qr/(pi*1000.*ntr))**(1./3.)
     dmg = (6.*rhoa*qg/(pi*rhog*ntg))**(1./3.)
@@ -3160,6 +3161,8 @@ SUBROUTINE refl_rsa (addtorain,ii,jj,kk,MPflg,MFflg,rhoa,fws,fwg,fwh,qs,qg,qh,qr
         Ntd = Ntd - Nds(i)
         if(Ntd <= 0) Nds(i) = 0.
       ENDDO
+      ! write(0,*) 'qs,nts,ntd = ',qs,nts,ntd
+      nts = ntd
     endif
   endif
 
@@ -3207,6 +3210,7 @@ SUBROUTINE refl_rsa (addtorain,ii,jj,kk,MPflg,MFflg,rhoa,fws,fwg,fwh,qs,qg,qh,qr
         Ntw = Ntw - Ndrs(i)
         if(Ntw <= 0) Ndrs(i) = 0.
       ENDDO
+      nts = ntw
     endif
   endif
 
@@ -3795,6 +3799,10 @@ SUBROUTINE refl_rsa (addtorain,ii,jj,kk,MPflg,MFflg,rhoa,fws,fwg,fwh,qs,qg,qh,qr
 !JYS  if(tempk < 0.) tempk = 0.0
   tempk = 180.*lambda/pi*(tfsar+tfsas+tfsah+tfsag+tfsars+tfsarh+tfsarg)*1.e-3
   T_kdp = tempk
+
+!   IF ( tair_C < 4.0 .and. T_qs > 1.e-4 ) THEN
+!     write(0,*) 't,qs,cx,tref = ',tair_C,t_qs,qs,nts,ntd,t_log_ref,tfsas,rhoms,rhos,rhoh,rhomh
+!   ENDIF
 
   ! For Jung et al. 2008 melting, adjust water fractions so that they represent the 
   ! water fraction with respect to the total ice, and not just the "melting ice", for 
@@ -5098,6 +5106,10 @@ SUBROUTINE refl_rsa_array(addtorain,MPflg,MFflg,nx,ny,nz,rsafndir,wavelen,ibgn,i
           qsw(i,j,k) = fws*qsout
           qgw(i,j,k) = fwg*qgout
           qhw(i,j,k) = fwh*qhout
+          
+          IF ( tair_C < 4.0 .and. qs(i,j,k) > 1.e-4 ) THEN
+!           write(0,*) 't,qs,cx,tref = ',tair_C,qs(i,j,k),qsout,nts(i,j,k),nsout,t_log_ref,rhomsout
+          ENDIF
           
           ! Also adjust qr, qs, qg, qh, nr, ns, ng, and nh appropriately
           qr(i,j,k) = qrout

@@ -205,8 +205,13 @@
 
   open(15,file=run_file(1:length),status='old',form='formatted')
   rewind(15)
+  write(0,*) 'read plot nml'
   read(15,NML=plot)
   rewind(15)
+  write(0,*) 'read microparams nml'
+  read(15,NML=micro_params)
+  rewind(15)
+  write(0,*) 'read dualpol nml'
   read(15,NML=dualpol,iostat=istat)
       IF ( istat .ne. 0 .and. my_rank == 0 ) THEN
         write(0,*) 'Problem reading dualpol namelist -- not found or bad token'
@@ -240,6 +245,10 @@
 
   IF( .not. READ_NAMELIST(run_file(1:length),'ICE10_PARAMS')  ) THEN
     IF ( my_rank == 0 ) print *, 'COMMAS:  PROBLEM READING NAMELIST ICE10_PARAMS'
+  ENDIF
+
+  IF( (.not. READ_NAMELIST(run_file(1:length),'OUTPUT_OPTIONS'))  ) THEN
+    IF ( my_rank == 0 ) write(0,*) 'COMMAS:  PROBLEM READING NAMELIST OUTPUT_OPTIONS'
   ENDIF
 
 ! READ IN GRID PARAMETERS

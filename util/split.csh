@@ -15,7 +15,7 @@ foreach runname ($argv)
   if ( $i > 1 ) then
   echo i = $i
   echo  $runname $frame $frame  $runname.${frame}.ps
-  pssplit $runname $frame $frame > ${runname}.${frame}.ps
+  pssplit.pl $runname $frame $frame > ${runname}.${frame}.ps
 #  set OUT = out.complot.${runname}.dbzth
 #  echo out = ${OUT}
   endif

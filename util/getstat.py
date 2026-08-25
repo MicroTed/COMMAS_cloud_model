@@ -19,6 +19,6 @@ for i in runnames:
      infile = i + infilesuf
      outfile = i + outfilesuf
      cmd = basecmd + ' ' + infile + ' > ' + outfile
-     print cmd
+     print (cmd)
      os.system(cmd)
 

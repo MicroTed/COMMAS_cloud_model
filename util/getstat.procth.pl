@@ -188,15 +188,21 @@ foreach $file (@ARGV) {
          $chcnih[$kz] = $procth[$kz][4];
          $chmul1[$kz] = $procth[$kz][10];
          $csplinter[$kz] = $procth[$kz][11];
+         $cwctfz[$kz] = $procth[$kz][33];
+         $ciint[$kz] = $procth[$kz][35];
        
        if ( $len - $nrain >= 44 ) {
            $qhshr[$kz] = $procth[$kz][42];
            $qfshr[$kz] = $procth[$kz][43];
            $qhlshr[$kz] = $procth[$kz][44];
+           $chlcnh[$kz] = $procth[$kz][36];
+           $chlcnf[$kz] = $procth[$kz][37];
           } else {
            $qhshr[$kz] = 0;
            $qfshr[$kz] = 0;
            $qhlshr[$kz] = 0;
+           $chlcnh[$kz] = 0;
+           $chlcnf[$kz] = 0;
           }
        
        if ( $nrain > 0 ) {
@@ -222,10 +228,11 @@ foreach $file (@ARGV) {
 
      if ( $min[1] >= 1 ) {
      for ($kz = 1; $kz < $nz; $kz++ ) {
-    printf OUT ( "%7.2f,  %6.3f,  %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e\n",
+    printf OUT ( "%7.2f,  %6.3f,  %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e\n",
       $min[1],$z[$kz],$procth[$kz][1],$procth[$kz][2],$procth[$kz][3],$procth[$kz][4],$procth[$kz][5],$procth[$kz][6],$procth[$kz][7],$procth[$kz][8],$procth[$kz][9],$procth[$kz][10],$procth[$kz][11],
        $procth[$kz][12],$procth[$kz][13],$procth[$kz][14],$procth[$kz][15],$procth[$kz][16],$procth[$kz][17],$procth[$kz][18],$procth[$kz][19],$procth[$kz][20],$procth[$kz][21],$procth[$kz][22],
-       $crfrzf[$kz]+$ciacrf[$kz],$qrfrzf[$kz]+$qiacrf[$kz], $rimdens[$kz], $chcnsh[$kz]+$chcnih[$kz], $procth[$kz][10]+$procth[$kz][11],$raintypefrz[$kz][1],$raintypefrz[$kz][2],$raintypefrz[$kz][3]);
+       $crfrzf[$kz]+$ciacrf[$kz],$qrfrzf[$kz]+$qiacrf[$kz], $rimdens[$kz], $chcnsh[$kz]+$chcnih[$kz], $procth[$kz][10]+$procth[$kz][11],$raintypefrz[$kz][1],$raintypefrz[$kz][2],$raintypefrz[$kz][3],
+       $chlcnh[$kz],$chlcnf[$kz],$cwctfz[$kz],$ciint[$kz]);
 
       }  }
      

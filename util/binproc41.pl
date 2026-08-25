@@ -205,6 +205,62 @@ foreach $file (@ARGV) {
         $nonindn = 0;
         $nonindp = 0;
         $tries = 0;
+        $vhacw = 0;
+        $qrcnw = 0;
+        $qrcnw = 0;
+        $pcond = 0;
+        $qcond = 0;
+        $pevap = 0;
+        $pmlt = 0;
+        $pdep = 0;
+        $psub = 0;
+        $pevapr = 0;
+        $qrcnw = 0;
+        $qracw = 0;
+        $qhlmlr = 0;
+        $qhmlr = 0;
+        $qhlacr = 0;
+        $qhlacw = 0;
+        $ciint = 0;
+        $ic = 0;
+        $cgp = 0;
+        $fdauto = 0;
+        $fdshed = 0;
+        $fdmelt = 0;
+        $crfrzf = 0;
+        $ciacrf = 0;
+        $chcnsh = 0;
+        $chcnih = 0;
+        $qhacwrsh = 0;
+        $qhlacwrsh = 0;
+        $qhacw = 0;
+        $qhacr = 0;
+        $qhshr = 0;
+        $qfshr = 0;
+        $qhlshr = 0;
+        $qhlcnh = 0;
+        $qhlcnf = 0;
+        $pchld = 0;
+        $chlfmlr = 0;
+        $nfdauto = 0;
+        $nfdshed = 0;
+        $nfdmelt = 0;
+        $chlcnh = 0;
+        $chlcnf = 0;
+        $cwctfz = 0;
+        $pmlt = 0;
+        $pdep = 0;
+        $psub = 0;
+        $pevapr = 0;
+        $pfrz = 0;
+        $crfrzs = 0;
+        $ciacrs = 0;
+        $chmul1 = 0;
+        $csplinter = 0;
+        $qrfrzf = 0;
+        $qiacrf = 0;
+        $crcnw = 0;
+        $crmltshd = 0;
         $times = $times1;
        } 
     
@@ -423,7 +479,7 @@ foreach $file (@ARGV) {
 
      $ptemtot = $ptemtot + $ptem;
      $ptem[$curbin] = $ptem;
-     $ptem = 0;
+     $qrcnw = 0;
 
      $pcondtot = $pcondtot + $pcond;
      $pcond[$curbin] = $pcond;
@@ -809,7 +865,7 @@ foreach $file (@ARGV) {
       $pmlt   = $pmlt + $parts[19]; # melting rate
       $pdep   = $pdep + $parts[20]; # deposition rate
       $psub   = $psub + $parts[21]; # sublimation rate
-      $pfrz   = $pfrz + $parts[22]; # melting rate
+      $pfrz   = $pfrz + $parts[22]; # freezing rate
       $crfrzs   = $crfrzs + $parts[23]; # rain -> snow number rate (bigg)
       $ciacrs   = $ciacrs + $parts[24]; # rain -> snow number rate (ice capture)
       

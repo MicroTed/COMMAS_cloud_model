@@ -1,14 +1,10 @@
 #!/usr/bin/perl
-# a perl program to read in a .out file and extract electric energy at each time
+# a perl program to read in a .out file and total rain and hail rates and accumlations over time
+# 
+# usage:
+# rainfall.pl run.000.000.out > run.rainfall.txt
 #
 #
-# Looks for the lines:
-# $infile = 
-#open(INPUT, "$run.hlgttyphsll") or die "file not found";
-#open(INPUT, "linegrab") or die "file not found";
-
-#open(INPUT, "$run.log") or die "file not found";
-
 #open(OUT, ">$run.flashbin") or die "cannot create file";
  open(OUT, '>-');
 $cr = chr(13);  # newline character for Mac
@@ -77,8 +73,9 @@ $lf = chr(10);  # newline character for Unix
       $raintotold = 0;
       $hailtot = 0;
       $hailtotold = 0;
+      $printflag = 0;
 
-     print ("Time (s), Time (min), Rain Rate, Hail Rate, Rain Accum., Hail Accum.\n");
+     print ("Time (s), Time (min), Rain Rate, Ice Rate, Hail Rate, Hail-FD Rate, Rain Accum., Ice Accum, Hail Accum., Hail-FD Accum.\n");
 
 # foreach ...
 foreach $file (@ARGV) {
@@ -169,7 +166,15 @@ foreach $file (@ARGV) {
        }
 #       if ( $irst2 == 1 ) {  print ("HERE I AM: $newbin, $curbin\n"); }
      }
-#    if ( /^NSTEP,/ ) {
+    if ( /^NSTEP,/ ) {
+     $next = <INPUT>;
+     chomp($next);
+     @parts = split(/ +/, $next);
+     $nstep = $parts[1];
+     $nstop = $parts[3];
+     $timesec = $parts[4];
+    
+      }
     
 # Total rainfall =   0.0000000E+00
 # Total hailfall =   0.0000000E+00
@@ -180,26 +185,53 @@ foreach $file (@ARGV) {
       chomp();
       @parts = split( / +/ );
       $raintot = $parts[4];
-
-      $next = <INPUT>;
-      chomp($next);
-      @parts = split(/ +/,$next);
-      $hailtot = $parts[4];
-
-      $next = <INPUT>;
-      $next = <INPUT>;
-      @parts = split(/ +/,$next);
-      $timesec = $parts[3];
-      
       $timemin = $timesec/60.;
       
       $delrain = $raintot-$raintotold;
-      $delhail = $hailtot-$hailtotold;
-      
-      print OUT ("$timesec, $timemin, $delrain, $delhail, $raintot, $hailtot\n");
-      
       $raintotold = $raintot;
+      $printflag = 1;
+
+      }
+      
+    if ( /^ Total hailfall/ ) {
+#       $next = <INPUT>;
+#       chomp($next);
+#       @parts = split(/ +/,$next);
+      chomp();
+      @parts = split( / +/ );
+      $icetot = $parts[4];
+      $delice = $icetot-$icetotold;
+      $icetotold = $icetot;
+
+      }
+    if ( /^ Total hail =/ ) {
+#       $next = <INPUT>;
+#       chomp($next);
+#       @parts = split(/ +/,$next);
+      chomp();
+      @parts = split( / +/ );
+      $hailtot = $parts[4];
+      $delhail = $hailtot-$hailtotold;
       $hailtotold = $hailtot;
+      }
+
+    if ( /^ Total hail from FD/ ) {
+#       $next = <INPUT>;
+#       chomp($next);
+#       @parts = split(/ +/,$next);
+      chomp();
+      @parts = split( / +/ );
+      $hailfdtot = $parts[6];
+      $delhailfd = $hailfdtot-$hailfdtotold;
+      $hailfdtotold = $hailfdtot;
+
+      }
+      
+     if ( /^ T =  /) {
+      if ( $printflag > 0 ) {
+      print OUT ("$timesec, $timemin, $delrain, $delice, $delhail, $delhailfd, $raintot, $icetot, $hailtot, $hailfdtot\n");
+      $printflag = 0;
+      }
     
       }
     

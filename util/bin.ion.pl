@@ -1029,11 +1029,11 @@ foreach $file (@ARGV) {
     $hailfdfalltot[0] = $hailfdfalltot[1];
     $hailonlyfalltot[0] = $hailonlyfalltot[1];
     
-    printf OUT ( "Totals:  %3d, %3d, %3d, %3d,  %10.1f, % 10.1f,%10.1f, % 10.1f, %10.1f, %7.1f, %10.3e, %10.3e, %10.3e, %10.3e, %10.3e, %10.3e,%10.3e, %10.3e, %10.3e, %10.3e, %10.3e,%10.3e,%10.3e, %10.3e, %10.3e, %10.3e, %10.3e, %10.3e, %10.3e\n",
+    printf OUT ( "Totals:  %3d, %3d, %3d, %3d,  %10.1f, % 10.1f,%10.1f, % 10.1f, %10.1f, %7.1f, %10.3e, %10.3e, %10.3e, %10.3e, %10.3e, %10.3e,%10.3e, %10.3e, %10.3e, %10.3e, %10.3e,%10.3e,%10.3e, %10.3e, %10.3e, %10.3e, %10.3e, %10.3e, %10.3e, %10.3e, %10.3e\n",
                 $ictot, $cgptot, $cgntot, $triestot, $nonindtotn, $nonindtotp, $indtotn, $indtotp,
                 $icdistot,  $icdistot/Max($ictot,1), $icchargetot, $cgpchargetot, $cgnchargetot, $poschantot, 
                 $negchantot, $poschantot + $negchantot,$grmstot,$grvoltot,$grdens,$rainfalltot,$hailfalltot,
-                $wmaxmax,$grmstotti, $nonindtotp-$nonindtotn, $udketottot, $grpotetottot,$rainfallautotot,$rainfallshedtot,$rainfallmelttot ); 
+                $wmaxmax,$grmstotti, $nonindtotp-$nonindtotn, $udketottot, $grpotetottot,$rainfallautotot,$rainfallshedtot,$rainfallmelttot,$hlmstot,$grmstot+$hlmstot ); 
 
     if ( $ion == 0 ) {
     print OUT ( "bin ICs CGPs CGNs Tries ICDIS CGPchg CGNchg CGPchgcum CGNchgcum ",
@@ -1045,7 +1045,7 @@ foreach $file (@ARGV) {
     } elsif ($ion == 1 ) {
     print OUT ( "Time (min),IC Rate,IC/min,+CG Rate,-CG Rate,Tries,ICDIS,+CG charge,-CG charge,+CG cum. charge,-CG cum. charge,",
                 "NONI. neg,NONI. pos,IND. neg,IND. pos.,W-max (m/s),E-max (kV/m),Net Charge,Net Pos. Chg.,Net Neg. Chg.,",
-                "Graupel Volume (km**3),Graupel Mass (kg),Graupel Mass T < 0,Graupel Mass T > 0,Graupel Vol. T < 0,Graupel Vol. T > 0,Hail Mass (kg),Hail Vol. T < 0,Hail Vol. T > 0,",
+                "Graupel Volume (km**3),Graupel Mass (kg),Graupel Mass T < 0,Graupel Mass T > 0,Graupel Vol. T < 0,Graupel Vol. T > 0,Hail Mass (kg),Hail Vol. T < 0,Hail Vol. T > 0,Graupel+Hail Mass T < 0,",
                 "Cloud Ice Mass,Cloud Droplet Mass,Rain Mass Tot,Rain Mass (T < 0),Rain Mass (T > 0),Snow Mass,G-I Neg,G-I Pos,G-S Neg,G-S Pos,H-I Neg,H-I Pos,H-S Neg,H-S Pos,Updraft Mass Flux (T=0) (kg/s),Updraft Mass Flux (T=-10) (kg/s),",
                 "Updraft Mass Flux (T=-20) (kg/s),Updraft Mass Flux (T=-30) (kg/s),Crystal Mass Flux (T=-10),Crystal Mass Flux (T=-20),Crystal Mass Flux (T=-30),icnetchg,",
                 "Downdraft Volume (< -5m/s),Updraft Volume (> 5m/s),Updraft Volume (> 10m/s),Updraft Volume (> 20m/s),",
@@ -1065,13 +1065,13 @@ foreach $file (@ARGV) {
       
     
 #    printf OUT ( "%8.1f, %3d, %7.2f, %3d, %3d, %3d, %8.3f, % 8.3f, % 8.3f, % 8.3f, % 8.3f, % 8.3f, % 8.3f, % 8.3f, % 8.3f, %5.2f, %5.2f, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %9d, %9d, %9d, %e, %e, %e, %e, %e\n",
-    printf OUT ( "%8.1f,  %3d,   %7.2f,   %3d,   %3d,   %3d,   %8.3f,   % 8.3f,  % 8.3f,  % 8.3f,  % 8.3f, % 8.3f, % 8.3f, % 8.3f, % 8.3f, %5.2f,  %5.2f,  %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %9d, %9d, %9d, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e\n",
+    printf OUT ( "%8.1f,  %3d,   %7.2f,   %3d,   %3d,   %3d,   %8.3f,   % 8.3f,  % 8.3f,  % 8.3f,  % 8.3f, % 8.3f, % 8.3f, % 8.3f, % 8.3f, %5.2f,  %5.2f,  %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %9d, %9d, %9d, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e\n",
       $bintime[$i],  $ic[$i], $icpermin[$i], $cgp[$i],  $cgn[$i],  
       $tries[$i], $icdis[$i],  $cgpcharge[$i],
       $cgncharge[$i], $cgpchargecum[$i], $cgnchargecum[$i], 
       $nonindn[$i], $nonindp[$i], $indn[$i], 
       $indp[$i], $wmax[$i], $efield[$i]*0.001,
-      $netchg[$i],$netchgp[$i],$netchgn[$i],$grvol[$i], $grms[$i],$grmsa[$i],$grmsb[$i], $grvola[$i], $grvolb[$i], $hlms[$i], $hlvola[$i], $hlvolb[$i],
+      $netchg[$i],$netchgp[$i],$netchgn[$i],$grvol[$i], $grms[$i],$grmsa[$i],$grmsb[$i], $grvola[$i], $grvolb[$i], $hlms[$i], $hlvola[$i], $hlvolb[$i], $hlmsa[$i]+$grmsa[$i],
       $ticms[$i],$cwms[$i], $rnms[$i],$rnmsa[$i],$rnmsb[$i], $swms[$i], $gin[$i], $gip[$i], $gsn[$i], $gsp[$i], $hin[$i], $hip[$i], $hsn[$i], $hsp[$i],
       $udmf00[$i], $udmf10[$i] , $udmf20[$i],$udmf30[$i],
       $uicmf10[$i], $uicmf20[$i], $uicmf30[$i], $icchargecum[$i],

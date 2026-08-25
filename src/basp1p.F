@@ -103,7 +103,7 @@ c                    (dx,dy,dz,nx,ny,nz,na,nor,nv)
       real scale
       
       integer ieps, inameps, epsflag,ifirsteps
-      character*80 outnameps
+      character*120 outnameps
       save inameps
 
       
@@ -113,7 +113,7 @@ c                    (dx,dy,dz,nx,ny,nz,na,nor,nv)
       integer :: ifirst = 0
       save ifirst
       integer indx,iargc,iargc0
-      character*80 inputfile
+      character*120 inputfile
       
       integer iwdt   ! flag whether wdt files have been opened already
       data iwdt/0/
@@ -181,7 +181,7 @@ c      save z1d2
 !      real gr
       
 !      integer imsz  ! =1 for msz flashes, =0 for SLM flashes
-      character*80 xfname(5),bname,segname
+      character*120 xfname(5),bname,segname
       integer iusef,ixtraf
 
       logical fenele,feht1,femic,femica,febase,feflst,fesll
@@ -207,7 +207,7 @@ c      real tem2(nx,ny)
 c      real tem3(nx,ny)
       
       real hdist(nx+ny),zk(nz)
-      real zdb(nz)
+      real zdb(nz),scalez(nz)
       integer nhdist
       integer nx,ny,nz
 c      parameter(nx=nx,ny=ny,nz=nz)
@@ -927,7 +927,7 @@ c       write(0,*) 'kz, temkz =',kz,temkz(kz),piinit%flt1d(kz),sinit(kz,lt),db(k
 
       IF ( microp(1:3) == 'TAK' ) THEN
 
-           call setgrplhl(1,1)
+           call setgrplhl(1,1,iusewetsnow)
             rhograup(i,j,k) = rho_qh_tak
             rhohail(i,j,k) = rho_qhl_tak
            qr3d(1:nx,1:ny,1:nz) = st(1:nx,1:ny,1:nz,lr)
@@ -960,12 +960,14 @@ c       write(0,*) 'kz, temkz =',kz,temkz(kz),piinit%flt1d(kz),sinit(kz,lt),db(k
           alphar3d(:,:,:) = alphar
         ENDIF
 
+        alphas3d(:,:,:) = -0.4 ! alphas
+
         i = 0
         j = 0
         IF ( lh > 1 ) i = 1
         IF ( lhl > 1 ) j = 1
-        call setgrplhl(i,j)
-        call model_dsd(MPflg,cnor,cnos,cnohl,cnoh,cnos,rho_qhl,rho_qh)
+        call setgrplhl(i,j,iusewetsnow)
+        call model_dsd(MPflg,cnor,cnos,cnohl,cnoh,rho_qs,rho_qhl,rho_qh)
         call set_nbins(0)
         
         IF ( lh > 1 .and. lnh > 1 ) THEN
@@ -2122,6 +2124,7 @@ cc     :     andrhop(kz,it), andrhon(kz,it), andrhomag(kz,it)
            charr(kz,it,25) = sum( charr(kz,it,12:24) )  ! total hydrometeor mass
            charr(kz,it,26) = sum( charr(kz,it,16:24) ) + charr(kz,it,14)  ! total precip mass
            charr(kz,it,27) =  charr(kz,it,13)  + charr(kz,it,15)  ! qc + qi
+           charr(kz,it,28) =  charr(kz,it,22)  + charr(kz,it,24)  ! qg + qhl
 !           charr(kz,it,ibase_micth+1) = sum( charr(kz,it,12:24) )  ! total hydrometeor mass
 !           charr(kz,it,ibase_micth+2) = sum( charr(kz,it,16:24) ) + charr(kz,it,14)  ! total precip mass
 !           charr(kz,it,ibase_micth+3) =  charr(kz,it,13)  + charr(kz,it,15)  ! qc + qi
@@ -3033,7 +3036,7 @@ c     >  xmult, rlo, rhi, rin, tiso, sf, ishade,icrfil,mcl,cll
        call refl_rsa_array(addtorain,MPflg,MFflg,nx,ny,nz,dirscatt,wavelen,ibgn,iend,jbgn,jend,kbgn,kend,  
      :      rhoair,qr3d,qs3d,qg3d,qh3d,Ntr,Nts,Ntg,Nth,alphar3d,alphas3d,alphag3d,alphah3d,
      :      qsw,qgw,qhw,rhograup,rhohail, 
-     :      logZ,sumZh,sumZv,logZdr,logZdrrain,sumZhv,Kdp,Ahh,Avv,rhv,rhoms,rhomg,rhomh,tair,
+     :      logZ,sumZh,sumZv,logZdr,logZdrrain,sumZhv,Kdp,Ahh,Avv,rhv,rhoms,rhomg,rhomh,tair, ! note that rhoms,rhomg,rhomh are overwritten (for wet particles)
      :       dpmask, dbz%flt3d(1:nx,1:ny,1:nz) )
         ELSEIF (microp(1:3) == 'TAK' ) THEN
         
@@ -4051,7 +4054,7 @@ c      write(lunw,200) 'xmin=',xmn,' imn=',imn,' jmn=',jmn, 'kmn=',kmn
       ENDDO
       
       icontent = 0
-      IF ( idx .ge. 1131 .and. idx .le. 1154 ) THEN
+      IF ( (idx .ge. 1131 .and. idx .le. 1154) .or. idx == 1158 ) THEN
         icontent = 1
         idx0 = 1130
         
@@ -4063,8 +4066,18 @@ c      write(lunw,200) 'xmin=',xmn,' imn=',imn,' jmn=',jmn, 'kmn=',kmn
           zdb(kz) = 1.0
         ENDDO
       ENDIF
+      IF ( thlengthscale < 0.0 ) THEN
+        scalez(:) = 1.0
+      ELSE
+        DO kz = 1,nz-1
+          scalez(kz) = thlengthscale*gzt(kz,3) ! normalize from per grid level to per length 
+        !  write(0,*) 'scalez = ',kz,scalez(kz)
+        ENDDO
+        scalez(nz) = scalez(nz-1)
+      ENDIF
       itshft = Nint( timearr(1)/dt ) - 1
       write(6,*) ' itshft,ib,ie = ',itshft,ib,ie
+      xmax3 = 0
       DO k=1,nzp
        kz = (k - 1) + kb
        DO ix=Max(ib,1),ie+1
@@ -4072,21 +4085,24 @@ c      write(lunw,200) 'xmin=',xmn,' imn=',imn,' jmn=',jmn, 'kmn=',kmn
        IF ( ix .gt. itshft ) THEN
         ix2 = Min(ie-itshft,ix-itshft-1)
         ix2 = Max(1,ix2)
-        xmax2 = Max(xmax2, charr(kz,ix2,idx-idx0)*zdb(kz) )
+        xmax2 = Max(xmax2, charr(kz,ix2,idx-idx0)*zdb(kz)*scalez(kz) )
         IF ( charr(kz,ix2,idx-idx0) .ge. 0.0 ) THEN
-          plt2dp(i,k) = charr(kz,ix2,idx-idx0)*zdb(kz)
+          plt2dp(i,k) = charr(kz,ix2,idx-idx0)*zdb(kz)*scalez(kz)
 c
 c The following code keeps the contour lines from going off the bottom
 c  of the plot (keeps a closed contour around CGs)
 c
            IF ( (idx .eq. 902 .or. idx .eq. 903) .and. ishade .lt. 100
      :      .and. kz .eq. 1 ) THEN
-c         write(0,*) idx,ishade,kz,charr(kz,ix2,idx-idx0)
-           plt2dp(i,k) = Min(0.7, charr(kz,ix2,idx-idx0) )
+c            write(0,*) idx,ishade,kz,charr(kz,ix2,idx-idx0)
+             plt2dp(i,k) = Min(0.7, charr(kz,ix2,idx-idx0) )
            ENDIF
-         xmax3 = Max(xmax3, plt2dp(ix,kz)  )
-          IF ( plt2dp(i,k) .gt. xmax ) THEN
+       !   xmax3 = Max(xmax3, plt2dp(i,k)  )
+          IF ( plt2dp(i,k) .gt. xmax .and. k <= n2 ) THEN
            xmax = plt2dp(i,k)
+           IF ( k < nzp ) THEN
+            xmax3 = xmax
+           ENDIF
 c           write(6,*) 'xmax = ',xmax
            imx = ix
            kmx = kz
@@ -5163,7 +5179,7 @@ c
       call gsfais(1)
       call sfseti('TY',0)
 !      CALL ARSCAM (IAMA,XCRA,YCRA,MCS,IARA,IGRA,MAI,BLURED)
-      if ( idolab .eq. 1 ) then
+      if ( idolab .eq. 1  .and. nclr > 2 ) then
       ifll0 = 1 !  228 - Nint(rfac4) + 1
       if ( ilabor .eq. 1 ) then
       call lblbar(ilabor,xbarl,xbarr,ybarb,ybart,
@@ -5796,7 +5812,7 @@ c
          ENDIF
 
          nclr = nclv
-         if ( idolab .eq. 1 ) then
+         if ( idolab .eq. 1  .and. nclr > 2 ) then
           if ( ilabor .eq. 1 ) then
            call lblbar(ilabor,xbarl,xbarr,ybarb,ybart,
      >       nclr,0.3,1.0,ifill,1,labcbar,nclr+1,2)
@@ -5840,7 +5856,7 @@ c           DO i = 1,Min(9,nclr)
 c           ifill(i) = 229 + i
 c           ENDDO
 c         ENDIF
-         if ( idolab .eq. 1 ) then
+         if ( idolab .eq. 1  .and. nclr > 2 ) then
           if ( ilabor .eq. 1 ) then
            call lblbar(ilabor,xbarl,xbarr,ybarb,ybart,
      >       nclr,0.3,1.0,ifill,1,labcbar,nclr+1,1)
@@ -5886,7 +5902,7 @@ c           DO i = 1,Min(9,nclr)
 c           ifill(i) = 229 + i
 c           ENDDO
 c         ENDIF
-         if ( idolab .eq. 1 ) then
+         if ( idolab .eq. 1 .and. nclr > 2 ) then
           if ( ilabor .eq. 1 ) then
            write(*,*) 'DEBUG20a3a: nclr = ',nclr
            call lblbar(ilabor,xbarl,xbarr,ybarb,ybart,
@@ -6553,7 +6569,7 @@ c more group noninductive rates
       title(16) = 'CLOUD WATER-ICE (G/KG)'
       title(17) = 'VISIBLE CLOUD (G/KG)'
       title(18) = 'TOTAL ICE (G/KG)'
-      title(19) = 'TOTAL LIQUID WATER (G/KG)'
+      title(19) = 'Total Liquid Water Content (g/m^3)'
       title(20) = 'TOTAL PRECIPITATION WATER (G/KG)'
       title(21) = 'TOTAL CONDENSATE (G/KG)'
       title(22) = 'RADAR (DBZ)'
@@ -6700,6 +6716,15 @@ c
       title(181) = 'HORIZ. SHEAR X (1.0E+03) >2.5/S'
       title(182) = 'VERT. WIND SHEAR X (1.0E+02) >8.3/S'
       title(183) = 'VERT. WIND HAZARD REGION >2.0 M/S'
+
+      title(221) = 'dBZ Net Oversorting'
+      title(222) = 'dBZ Undersorting'
+      title(223) = 'dBZ Over/undersorting'
+      title(224) = 'dBZ Gross Oversorting'
+      title(225) = 'dBZ Size Limiter Change'
+      title(226) = 'Hail number rate from graupel' ! # m-3 s-1 averaged over thistory
+      title(227) = 'Hail number rate from frozen drops' ! # m-3 s-1 averaged over thistory
+      title(228) = 'Total Hail number rate' ! # m-3 s-1 averaged over thistory
 
       title(239) = 'TOTAL HAIL (N/M**3)'
       title(240) = 'SMALL GRAUPEL: 0.05<D (CM) (N/M**3)'
@@ -7029,7 +7054,7 @@ c
 c
       title(710) = 'HAIL TYPES'
       title(711) = 'Hail shape parameter' ! alphahl
-      title(712) = 'Hail Content'
+      title(712) = 'Hail Content (g/m**3)'
       title(713) = 'Hail number concentration'
       title(714) = 'Hail Mean Volume Diameter'
       title(715) = 'HAIL TERMINAL VELCOITY'
@@ -7153,7 +7178,7 @@ c
       title(1012) = 'W-Min (m/s)'
 
 !
-! Microphysics process time-height
+! Microphysics process time-height: the order is determined by output from getstat.procth.pl
 !
       title(1021) = 'crfrzf'
       title(1022) = 'ciacrf'
@@ -7193,6 +7218,10 @@ c
       title(1048) = 'Frozen drops from rain-auto'
       title(1049) = 'Frozen drops from rain-shed'
       title(1050) = 'Frozen drops from rain-melt'
+      title(1051) = 'Hail number from graupel' ! chlcnhhl
+      title(1052) = 'Hail number from frozen drops' ! chlcnfhl
+      title(1053) = 'Droplet contact freezing (#)' ! chlcnfhl
+      title(1054) = 'Ice crystal nucleation (#)' ! chlcnfhl
       ENDIF
 
 
@@ -7258,6 +7287,7 @@ c
       title(1125) = 'Total hydrometeor mass (kg)'
       title(1126) = 'Total precipitation mass (kg)'
       title(1127) = 'Total non-precipitation mass (kg)'
+      title(1128) = 'Graupel+FD/Hail (kg)'
 
 c  Maximum content:
 
@@ -7321,6 +7351,8 @@ c  Maximum content:
       ELSE
       title(1154) = 'Large Hail (kg/level)'
       ENDIF
+
+      title(1158) = 'Graupel+FD/Hail (kg/level)'
 
       RETURN
       END

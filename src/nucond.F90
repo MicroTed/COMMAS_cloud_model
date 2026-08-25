@@ -223,8 +223,6 @@
                   ! =0 to use ad to calculate SS
                   ! =1 to use an at end of main jy loop to calculate SS
       parameter (iba = 1)
-      integer ifilt   ! =1 to filter ssat, =0 to set ssfilt=ssat
-      parameter ( ifilt = 0 ) 
       real temp1,temp2 ! ,ssold
       real :: ssmax(ngs)      ! maximum SS experienced by a parcel
       real ssmx
@@ -258,7 +256,7 @@
       real dqvr, dqc, dqr, dqi, dqs
       real qv1m,qvs1m,ss1m,ssi1m,qis1m
       real cwmastmp 
-      real  dcloud,dcloud2 ! ,as, bs
+      real  dcloud,dcloud2,dcloudmx ! ,as, bs
       real dcrit
       real cn(ngs), cnuf(ngs)
       real :: ccwmax
@@ -1440,6 +1438,13 @@
        dqs = 0.0
        dqvii = 0.0
        dqvis = 0.0
+       
+!        IF ( icondlimit == 1 ) THEN
+!          ssmx = 0.001
+! 
+!          CALL QVEXCESS(ngs,mgs,qwvp,qv0,qx(1,lc),pres,thetap,theta0,dcloudmx, & 
+!      &      pi0,tabqvs,nqsat,fqsat,cbw,fcqv1,felvcp,ssmx,pk,ngscnt)
+!        ENDIF
 
 #ifdef COMMAS
        lprint = .false.
@@ -1450,7 +1455,7 @@
 !       ENDIF
 #endif
        RK2c: DO WHILE ( dt1 .lt. dtp )
-          nc = 0
+          !nc = 0
           IF ( n .le. 4 ) THEN
             dtcon = dtcon1
           ELSE
@@ -1539,6 +1544,15 @@
           ENDIF
        ENDDO RK2c
 
+
+!        IF ( icondlimit == 1 ) THEN
+!         IF ( dqc + dqr > 0.0 .and. dcloudmx > 0.0 .and. dqc + dqr > dcloudmx ) THEN
+!         ! backstop for max condensation
+!           tmp = dqc+dqr
+!           dqc = dqc*dcloudmx/tmp
+!           dqr = dqr*dcloudmx/tmp
+!         ENDIF
+!        ENDIF
 
         dcloud = dqc ! qx(mgs,lv) - qv1
         thetap(mgs) = thetap(mgs) + e1*(DCLOUD + dqr)

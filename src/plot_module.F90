@@ -13,8 +13,8 @@ MODULE PLOT_MODULE
    
    character(len=60)  :: stitle = 'COMMAS RUN'   ! name of simulation for plot title
    
-   character(len=80)  ::  inname,outname,inname2,flstname,cdum
-   character(len=80)  ::  thfile  ! name of file with time-height ascii data
+   character(len=120)  ::  inname,outname,inname2,flstname,cdum
+   character(len=120)  ::  thfile  ! name of file with time-height ascii data
    
    integer, parameter :: imsz = 0
    
@@ -110,6 +110,9 @@ MODULE PLOT_MODULE
    integer            :: ibase_thproc = 30 ! old is 27
    integer            :: ibase_micth = 24 ! old is 24
    logical            :: lraintyp2dswap = .false. ! for swapping 2D FD src arrays (shed and melt)
+
+   real               :: thlengthscale = -1.0 ! normalization length in meters for time-height plots to convert from 
+                                              ! 'per model level' to 'per vertical length scale'
 
    integer  :: recalcdbz = 0  ! =1 sets iusewetgraupel=1 and calls radardbz
    
@@ -230,7 +233,9 @@ MODULE PLOT_MODULE
                      iplotidx,         &
                      iplotcolorbar,    &
                      iplotrefvector,   &
-                     vectoffsetx, vectoffsety, vectcharsize
+                     ibase_thproc,     &
+                     vectoffsetx, vectoffsety, vectcharsize, &
+                     thlengthscale
                      
 !  NAMELIST /dualpol/ do_dualpol, &
 !                     dirscatt,   &

@@ -14,7 +14,7 @@
 # print ( @ccn );
 # print ( "prefix = $prefix\n");
 #print OUT ("CCN,crfrzftot, ciacrftot, chcnshtot, chcnihtot, qhacwrshtot, qracwtot, qrcnwtot, vhacwtot, ptemtot, pcondtot, chmul1tot,  csplintertot,  qrfrzftot,  qiacrftot,  crcnwtot, crmltshdtot, qcondtot, pevaptot, pmlttot, pdeptot, psubtot, pfrztot, crfrzstot, ciacrstot, qhmlrtot, qhlmlrtot, qhlacwrshtot, qhlacwtot, qhlacrtot, qhacwtot, qhacrtot, qhacwrshtot+qhlacwrshtot, qhmlrtot+qhlmlrtot\n");
-print OUT ("CCN,ICtot,+CG,-CG,Tries,-NIC,+NIC,-IND,+IND,IC discharge (C), Charge per IC,Net IC charge, +CG charge (C), -CG charge (C), Pos. Channel pnts, Neg. Channel pnts, Total Channel pnts,Tot. Graupel Mass (kg s),Tot. Graupel vol. (kg^3 s),grdens,rainfalltot,hailfalltot,wmaxmax,grmstotti, nonindtotp-nonindtotn,Total Updraft KE (J s), Total Prec. Grav. PE (J s)\n");
+print OUT ("CCN,ICtot,+CG,-CG,Tries,-NIC,+NIC,-IND,+IND,IC discharge (C), Charge per IC,Net IC charge, +CG charge (C), -CG charge (C), Pos. Channel pnts, Neg. Channel pnts, Total Channel pnts,Tot. Graupel Mass (kg s),Tot. Graupel vol. (kg^3 s),grdens,rainfalltot,hailfalltot,wmaxmax,grmstotti, nonindtotp-nonindtotn,Total Updraft KE (J s), Total Prec. Grav. PE (J s),rainfallautotot,rainfallshedtot,rainfallmelttot,Tot. Hail/FD Mass (kg s),Tot. Graupel+Hail Mass (kg s)\n");
 
 #foreach $file (@ARGV) {
 foreach $val (@ccn) {
