@@ -13861,13 +13861,15 @@
           IF ( -qhshr(mgs) <= qhacr(mgs) + qhacw(mgs) ) THEN
             IF ( ished2cld == 5 ) THEN
             ENDIF
-            frac = -qhshr(mgs)/( qhacr(mgs) + qhacw(mgs) )
+            frac = 1.0 + fshed2cld*qhshr(mgs)/( qhacr(mgs) + qhacw(mgs) )
+            ! part that stays in cloud/rain
             qhacr(mgs) = frac*qhacr(mgs)
             qhacw(mgs) = frac*qhacw(mgs)
             chacr(mgs) = frac*chacr(mgs)
             chacw(mgs) = frac*chacw(mgs)
-            chshrr(mgs) = 0.0 ! frac*chshrr(mgs)
-            qhshr(mgs) = 0.0
+            ! part that was shed
+            chshrr(mgs) = (1.0-fshed2cld)*chshrr(mgs)
+            qhshr(mgs)  = (1.0-fshed2cld)*qhshr(mgs)
           ELSE
            ! can this happen?
             qhshr(mgs) = 0.0 ! qhshr(mgs) + qhacr(mgs) + qhacw(mgs)
@@ -13882,13 +13884,13 @@
       
         IF ( lhl > 1 .and. qhlshr(mgs) < 0.0 ) THEN
           IF ( -qhlshr(mgs) <= qhlacr(mgs) + qhlacw(mgs) ) THEN
-            frac = -qhlshr(mgs)/( qhlacr(mgs) + qhlacw(mgs) )
+            frac = 1.0 + fshed2cld*qhlshr(mgs)/( qhlacr(mgs) + qhlacw(mgs) )
             qhlacr(mgs) = frac*qhlacr(mgs)
             qhlacw(mgs) = frac*qhlacw(mgs)
             chlacr(mgs) = frac*chlacr(mgs)
             chlacw(mgs) = frac*chlacw(mgs)
-            qhlshr(mgs) = 0.0
-            chlshrr(mgs) = 0.0 ! frac*chlshrr(mgs)
+            qhlshr(mgs) = (1.0-fshed2cld)*qhlshr(mgs)
+            chlshrr(mgs)= (1.0-fshed2cld)*chlshrr(mgs)
           ELSE
             qhlshr(mgs) = 0.0 ! qhlshr(mgs) + qhlacr(mgs) + qhlacw(mgs)
             qhlacr(mgs) = 0.0
@@ -13902,13 +13904,13 @@
 
         IF ( lf > 1 .and. qfshr(mgs) < 0.0 ) THEN
           IF ( -qfshr(mgs) <= qfacr(mgs) + qfacw(mgs) ) THEN
-            frac = -qfshr(mgs)/( qfacr(mgs) + qfacw(mgs) )
+            frac = 1.0 + fshed2cld*qfshr(mgs)/( qfacr(mgs) + qfacw(mgs) )
             qfacr(mgs) = frac*qfacr(mgs)
             qfacw(mgs) = frac*qfacw(mgs)
             cfacr(mgs) = frac*cfacr(mgs)
             cfacw(mgs) = frac*cfacw(mgs)
-            qfshr(mgs) = 0.0
-            cfshrr(mgs) = 0.0 ! frac*cfshrr(mgs)
+            qfshr(mgs) = (1.0-fshed2cld)*qfshr(mgs)
+            cfshrr(mgs)= (1.0-fshed2cld)*cfshrr(mgs)
           ELSE
             qfshr(mgs) = 0.0 ! qfshr(mgs) + qfacr(mgs) + qfacw(mgs)
             qfacr(mgs) = 0.0
@@ -13921,7 +13923,7 @@
         ENDIF
        
 
-        ! resum, but should all be zeros
+        ! resum, but should all be zeros (unless fshed2cld < 1.)
         qrshr(mgs) = qsshr(mgs) + qhshr(mgs) + qhlshr(mgs)
         crshr(mgs) = chshrr(mgs)/rzxh(mgs) + chlshrr(mgs)/rzxhl(mgs)
       

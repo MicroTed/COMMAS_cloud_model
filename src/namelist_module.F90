@@ -899,7 +899,7 @@ NAMELIST /output_options/               &
                         cnu,            &
                         iscni,fscni,    &
                         dfrz,           &
-                        dmlt, dshd, ished2cld, ivshdgs, &
+                        dmlt, dshd, ished2cld, ivshdgs, fshed2cld, &
                         rainfallfac,    &
                         icefallfac,     &
                         snowfallfac,    &
@@ -1316,7 +1316,7 @@ NAMELIST /output_options/               &
                         cnu,            &
                         iscni,fscni,    &
                         dfrz,           &
-                        dmlt, dshd, ished2cld, ivshdgs, &
+                        dmlt, dshd, ished2cld, ivshdgs, fshed2cld, &
                         rainfallfac,    &
                         icefallfac,     &
                         snowfallfac,    &

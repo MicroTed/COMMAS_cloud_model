@@ -363,6 +363,7 @@
   real, PUBPRIV    :: dmlt = 3.0e-3  ! maximum (mean volume) diameter for rain melting from graupel and hail
   real, PUBPRIV    :: dshd = 1.0e-3  ! nominal diameter for drops shed from graupel/hail
   integer, PUBPRIV :: ivshdgs   = 1  ! 0 = use dshd for all shedding (non-mixedphase); 1 = use vshdgs with sheddiam
+  real, PUBPRIV    :: fshed2cld = 1.0 ! fraction reduction with ished2cld=2
   integer, PUBPRIV :: ished2cld = 0  ! 1: Send shed liquid (from wet growth) to cloud droplets
                                      ! 2: Reduce collection to offset shedding
                                      ! 3: As for 2 but only for T < 0
