@@ -51,15 +51,11 @@
 !    'KESSLER'  : bulk warm-rain Kessler scheme (cloud droplets and rain)
 !    'SCG'      : Zhang et al. Simplified Constrained Gamma bulk warm-rain scheme (cloud droplets and rain)
 !    'LFO'      : bulk 3-ice scheme (Lin et al. 1983)
-!    'WARMLFO'  : liquid-only part of LFO (similar to Kessler, but has explicit rain intercept)
-!    'WARMZIEG' : liquid-only part of two-moment Ziegler 1985 scheme
-!    'ICE10'    : bulk 10-ice scheme (Straka and Mansell, 2005)
-!    'ICE10E'   : As for ICE10 with electrification variables added
-!    'ICE10DM'  : 2-moment 10-ice (under development, can use ipconc=1,2, or 3)
-!    'ICE10DME' : As for ICE10DM with electrification variables added
-!    'ZIEG'     : 2-moment 3-ice Ziegler 1985 scheme 
-!    'ZVD'      : 2-moment 3-ice Ziegler 1985 scheme with variable graupel density.
-!    'ZVDE'     : As ZVD with electrification variables added.
+!    'ZIEG'/'ZIEGH' : 3/4-ice NSSL scheme (fixed density) ("H" turns on hail) see ipconc for 1/2/3 moment
+!    'ZVD'/'ZVDH'   : 3/4-ice NSSL scheme with variable graupel and hail density. ("H" turns on hail)  see ipconc for 1/2/3 moment
+!    'ZVDE'/'ZVDHE' : NSSL with electrification variables added. ("H" turns on hail) see ipconc for 1/2/3 moment
+!    'MORR'     : Morrison 2-moment
+!    'THOM'     : Thompson scheme, which needs lookup tables (not included, see WRF)
 ! netcdfversion : If compiled with netCDF 4, this chooses version 3 or 4 output (ignored when compiled with netcdf3)
 ! historyoutput :  0=netcdf for each MPI tile; 
                    1=single netcdf (default), 
@@ -86,17 +82,17 @@
            hour =              00,
          minute =               0,
          second =               0,
-      microphys =           'LFO',
+      microphys =           'ZVDH',
       netcdfversion =           4,
       historyoutput =           1,
       parallelio =           .false.,
       v5dstridex =              1,
       v5dstridez =              1,
-      v5dvarlist = 'THETA', 'THETAP', 'T', 'TD', 'TKE', 'U', 'V', 'W', 'DBZ',   ! STANDARD FIELDS
-                   'QV','QC', 'QR',                                                  ! WARM RAIN
-                  'QITOT', 'QS','QH',                                          ! 3-ice categories
-!                 'CCW', 'CRW', 'CHW','CWRAD', 'RWRAD','HWDIA',                ! two-moment stuff
-!                 'SCNET','EZ','POT','FLSHI','FLSHP','FLSHN',               ! Elec categories
+      v5dvarlist = 'THETA', 'THETAP', 'T', 'TD', 'TKE', 'U', 'V', 'W', 'DBZ',  
+                   'QV','QC', 'QR',            
+                  'QITOT', 'QS','QH',          
+!                 'CCW', 'CRW', 'CHW','CWRAD', 'RWRAD','HWDIA',   
+!                 'SCNET','EZ','POT','FLSHI','FLSHP','FLSHN',     
 !                 'CGHIS',
 /            
 
@@ -124,6 +120,7 @@
 !
 ! nbndlyr    : number of (unstretched) levels from bottom with thickness of dz_stretch
 !
+! lat is only used for Coriolis term
 &gridn
              nx =              61, 
              ny =              61, 
@@ -233,7 +230,8 @@
 !
 ! Bubble parameters:
 !   nbble  : number of bubbles (up to maxbub = 10)
-! bbletype : (1 => tbble, 2 => tbble+0.1K random, 3 => tbble+Kogan (percentage fluctuation)
+! bbletype : (1 => tbble, 2 => tbble+0.1K random, 3 => tbble+dthranpert
+! Note: Random thermal perturbations are repeatable (independent of MPI domain decomp)
 !          tbble :  magnitude(s) of bubble temperature perturbation
 !          xrad : x-radius of bubble(s)  (set to greater than 1e7 to create an E-W 2D cylinder)
 !          yrad : y-radius of bubble(s)  (set to greater than 1e7 to create a  N-S 2D cylinder)
@@ -259,6 +257,7 @@
           dudz0 =            0.01, 
           dudz1 =           0.005, 
           nbble =               1,
+     dthranpert =             0.1,
        bbletype =               1, 
           tbble =             2.0,   3.0, 3.0,  
            xrad =         10000.0, 1.0e4, 1.0e4, 
@@ -284,38 +283,9 @@
 !  twstop  : integer time (seconds) for forcing to stop
 !  xwfmov  : x-direction movement of forcing region, -1000 moves region with mean wind in forcing depth
 !
-!================================================================================
-&forcing
-         iforce =           0,
-          nwfor =           1,
-        iwforce =           1, 
-         iwshap =          -1,     -1,   -1,
-         wfmeso =          6.0e-2, 2.0e-2, 4.0e-2
-         xwfrad =          6000.0, 6000., 2.5e3,
-         ywfrad =          6000.0, 6000., 2.5e3,
-         zwfrad =          1500.0, 1000., 1500.,
-         xwfcen =         16000.0,16000., 8.5e3,
-         ywfcen =         35000.0,20000., 6.0e3,
-         zwfcen =          1500.0, 1000., 1500.,
-         twstrt =          0,      3600,     0,
-         twstop =          1200,   5400,  3600,
-         xwfmov =          -1000., -1000.,-1000.
-/
-
-!================================================================================
-! FORCING namelist
-!  Here you can set up an ellipsoidal region of vertical forcing, which 
-!  induces horizontal convergence.  At the moment, only forcing of W is 
-!  available
-!  
-!  iforce :  0 = no forcing; 1 = forcing on
-!  nwfor  : number of forcing regions
-!  iwforce : 0 = no W forcing;  = W forcing
-!  iwshap  : -1 = no forcing in downdraft; 1 = forcing independent of W
-!  wfmeso  : value of dW/dt (acceleration, usually on the order of 1e-2 to 6e-2
-!  twstrt  : integer time (seconds) when forcing starts
-!  twstop  : integer time (seconds) for forcing to stop
-!  xwfmov  : x-direction movement of forcing region, -1000 moves region with mean wind in forcing depth
+! Also available: 
+!  - U-forcing (for periodic squall lines)
+!  - forcing of hydrometeors at the top of the domain 
 !
 !================================================================================
 &forcing
@@ -334,6 +304,7 @@
          twstop =          1200,   5400,  3600,
          xwfmov =          -1000., -1000.,-1000.
 /
+
 
 
 !================================================================================
@@ -439,7 +410,7 @@
 !  ioutput_workshop     : 0 : extra diagnostic arrays for workshop
 !  ioutput_ssw          : 0 : percent saturation wrt. liquid
 !  ioutput_ssi          : 0 : percent saturation wrt. ice
-!  ioutput_rh           : 0 : relative humidity (percent)
+!  ioutput_rh           : 0 : relative humidity (percent, wrt. liquid)
 !  ioutput_cwdia        : 0 : droplet mean diameter
 !  ioutput_ssmx         : 0 : maximum supersaturation (liquid) for a parcel
 !
@@ -458,6 +429,8 @@
         ioutput_rh          = 0,
         ioutput_cwdia       = 0,
         ioutput_ssmx        = 0,
+        ioutput_mltshedsizerates = 0,
+        ioutput_sedmeltstuff = 0,
 /
 
 !================================================================================
@@ -502,7 +475,7 @@
 
 
 &trajectories            
-       itraj = 1,
+       itraj = 0,
        ntrajtype = 1,
        ixtrj1 = 26, 
        ixtrj2 = 42, 
@@ -528,15 +501,15 @@
 !
 ! rho_x : particle density of precip type x (qr = rain, qs = snow, qh = graupel/hail)
 ! cnox  : Intercept value for type x
-!  NOTE: rho_qh is used by the ZIEG scheme (always), and the snow and hail params are used for ZIEG/ipconc=3
+!  NOTE: rho_qh is used by the ZIEG scheme,
 !
 ! autoconversion : 0 = standard LFO threshold on qc 
 !                : 1 = Ferrier threshold (checks for drop size of 20 microns)
-!                : Can set here or in ice10_params; IF SET IN ice10_params IT WILL OVERRIDE VALUE HERE!
+!                : Can set here or in micro_params; IF SET IN micro_params IT WILL OVERRIDE VALUE HERE!
 !
-! ccn            : For LFO/WARMLFO/ICE10(single moment) = assumed ccn value 
-!                : For ZIEG/ICE10DM = surface ccn concentration (scaled by air density; can set negative value to initialize as constant in domain)
-!                : Can set here or in ice10_params; IF SET IN ice10_params IT WILL OVERRIDE VALUE HERE!
+! ccn            : For LFO/WARMLFO/(single moment) = assumed droplet number concentration value 
+!                : For ZIEG/ZVDH = surface ccn concentration (scaled by air density)
+!                : Can set here or in micro_params; IF SET IN micro_params IT WILL OVERRIDE VALUE HERE!
 &lfo_params
           rho_qr = 1000., 
           cnor   = 8.0e6,
@@ -550,41 +523,27 @@
 !================================================================================
 !==========                                                            ==========
 !==========                                                            ==========
-!==========                  NAMELIST:  ICE10_PARAMS
+!==========                  NAMELIST:  MICRO_PARAMS
 !==========                                                            ========== 
 !==========                                                            ==========
 !================================================================================
 !
-! Used by 10ICE and ZIEG/ZVD schemes
+! Used by ZIEG/ZVD schemes
 ! 
 ! ipconc :  0 = single moment 
-!        :  1 = two-moment for ice crystals only (ICE10DM/ZVD/ZIEG)
-!        :  2 = two-moment for ice crystals and cloud droplets (ICE10DM/ZVD/ZIEG only)
-!        :  3 = two-moment cloud droplets, cloud ice, and rain (ICE10DM/ZVD/ZIEG)
-!               For ipconc .le. 3,  ZEIG/ZVD uses snow and graupel intercepts and densities from lfo_params
-!        :  5 = full two-moment (adds snow and graupel(s))     (ZEIG/ZVD/ZVDH)  (not recommended in ICE10DM yet)
-!        :  8 = partial 3-moment (rain, graupel, and hail) (not available in release)
+!        :  5 = full two-moment (adds snow and graupel(s))     (ZEIG/ZVD/ZVDH)
+!        :  8 = 3-moment for large hydrometeors (rain, graupel, and hail)
 !       NOTE: For ZIEG/ZVD only allowed options are 3 and 5
 !
-! itfall :  0 = box lagrangian fallout (1st order)     (default)
-!        :  2 = 6th-order monotonic                    (not recommended)
-! rz     :  reflectivity conservation factor (Ferrier 1994) (recommend default for now)
-! fconv  :  factor to allow larger depletion rates for some processes in 10ICE
-!
-! rcond  : (ZIEG only) 
-!          0 -> no condensation on rain; 
-!          1-> simple condensation on rain (not recom.); 
-!          2-> cond. on rain with droplets (default)
 !
 ! SEE namelist_module.f90 for current list of namelist variables and
 !      and micro_module.f90 for default values
 !
 ! For elec_params, see elec_module.f90 for default values
 !
-&ice10_params 
-          ipconc         = 5,
-          itfall         = 0,
-          fconv          = 1.0,
+&micro_params 
+    ipconc   = 5,
+    ccn      = 0.7e9
 /
 
 !================================================================================
@@ -663,6 +622,10 @@
                         0 : Diagnostic Smagorinsky KM
                         1 : "Full" TKE scheme predicting KM (via square root of TKE), following Deardorff (1980) and KW 1978
 
+      tke_type = 1,       ! 1 = Original TKE using KM as the predicted variable,
+                          ! 2 = TKE using sqrt(E) with separate horizontal and vertical mixing lengths (like WRF/CM1)
+                          ! mix_type = 2 will also set tke_type=2
+
 !     len_type = 0,       ! [0,1,2] => [volume,dz,BLR] Mixing length options (horiz. and vert. use the same mixing length in all options)
                         0 : (default) Mixing length is the cube root of the grid cell volume, i.e., Cm*(dx*dy*dz)**(1./3.)
                         1 : Mixing length is set to dz of the cell, i.e., Cm * dz
@@ -686,8 +649,8 @@
                              to preserve gradients.
 !
 ! Coriolis:
-!     coriol           = 0.0,  ! set to any positive number, and the value of LAT (from gridn namelist) will
-                                be used to compute the coriolis terms (f-plane)
+!     coriol           = 0.0,  ! set to any positive number to enable, which then uses the value of LAT (from gridn namelist)
+                                 to compute the coriolis terms (f-plane)
 !
 ! Boundary conditions:
 !     bcx     : East/West:    1 = KW radiative (default), 2 = periodic, 0 = mirror (not tested or working)
@@ -697,21 +660,24 @@
 !    rayd_mag = 0.001    ! Vertical rayleigh damping magnitude
 !    damph    = 0.01     ! coefficient for 6th-order computational filter (monotonic, Xue 2000)
 
-Advection options:
-    atypes1 : 0 :  scalar advection option for steps 1 and 2 of RK3
+Advection options and defaults:
+    atypes1 : 13 :  scalar advection option for steps 1 and 2 of RK3
     atypes2 : 1 : scalar advection option for step 3 of RK3
     atypem1 : 0 : momentum advection option for steps 1 and 2 of RK3
-    atypem2 : 0 : momentum advection option for step 3 of RK3
+    atypem2 : 0 : momentum advection option for step 3 of RK3 (can use 7th/9th WENO; WENO5 has more damping)
     
     Values:
        0 : 5th-order upwind advection, no extra filtering
        1 : 5th-order WENO scheme (weighted essentially non-oscillatory)
+       13 : 5th-order upwind advection with Leonard/Thuburn monotonic filter
+       10 : 7th-order WENO
+       16 : 9th-order WENO
        
-     The default options are generally recommended for simulations with dx >= 1km, for fine-grid simulations
+     The default options are generally recommended for simulations with dx >= 1km. For fine-grid simulations
      of supercells, atypem2 = 16 is a good option (9th-order WENO) to limit ringing in small-scale strong vortices
      Other options (such as 6th-order) are available, but rarely used (see header of advectrk.F90)
      
-    
+    Momentum advection option:
      integer :: iuvwadv = 1 !  1 = normal; 2 = box scheme; 3 = turns off wind update for pure scalar advection (kinematic model)
 
 Surface physics

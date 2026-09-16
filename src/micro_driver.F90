@@ -1560,8 +1560,8 @@
           tmp = tmp + tmppwf + tmppwfs ! all liquid (rain + liquid fractions)
           
           IF ( myprock == 1 ) THEN
-          xfalltot(ix,jy,1) = tmp*dv*dvt
-          xfalltot(ix,jy,3) = xfalltot(ix,jy,3) + tmp*dv
+          xfalltot(ix,jy,1) = tmp*dv*dvt ! total precip rate
+          xfalltot(ix,jy,3) = xfalltot(ix,jy,3) + tmp*dv ! tot precip accum
 
             IF ( iprainacc2 > 0 ) THEN
               xfalltot(ix,jy,iprainacc2) = xfalltot(ix,jy,iprainacc2) + dv*tmp
@@ -1634,7 +1634,7 @@
           ENDIF
           
           IF ( myprock == 1 ) THEN
-          xfalltot(ix,jy,2) = tmpdp*dv*dvt
+          xfalltot(ix,jy,2) = tmpdp*dv*dvt ! total ice rate
           xfalltot(ix,jy,4) = xfalltot(ix,jy,4) + tmpdp*dv
           ENDIF
           
@@ -1719,7 +1719,7 @@
 
              IF ( iphailfacc > 0 .and. lnhlf > 1 .and. lnhl > 1 ) THEN
              IF ( xfall(ix,jy,lnhl) > 0.0 ) THEN
-             ! hail number accumulation from frozen drops
+             ! hail mass accumulation from frozen drops
              xfalltot(ix,jy,iphailfacc) = xfalltot(ix,jy,iphailfacc) +  &
                               dv*Max( 0.0, xfall(ix,jy,lhl) - tmppwfhl )*xfall(ix,jy,lnhlf)/xfall(ix,jy,lnhl)
                IF ( iphailfacc2 > 0 ) THEN
@@ -1735,6 +1735,7 @@
                 xfalltot(ix,jy,iphailnumacc2) = xfalltot(ix,jy,iphailnumacc2) + dv*xfall(ix,jy,lnhl)
                ENDIF
                IF ( lnhlf > 1 .and. iphailfnumacc > 1 ) THEN
+                ! hail number accumulation from frozen drops
                  xfalltot(ix,jy,iphailfnumacc) = xfalltot(ix,jy,iphailfnumacc) +  dv*xfall(ix,jy,lnhlf)
                  IF ( iphailfnumacc2 > 0 ) THEN
                  xfalltot(ix,jy,iphailfnumacc2) = xfalltot(ix,jy,iphailfnumacc2) +  dv*xfall(ix,jy,lnhlf)
