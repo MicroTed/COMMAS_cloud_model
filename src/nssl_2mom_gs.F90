@@ -4716,6 +4716,7 @@
       cfmlrr(1:ngscnt) = 0.0
       cfsbv(1:ngscnt) = 0.0
       cfcev(1:ngscnt) = 0.0
+      cfdpv(1:ngscnt) = 0.0
       ENDIF
             
 
@@ -11078,6 +11079,7 @@
       chlcev(:) = 0.0
       qfcev(:) = 0.0
       cfcev(:) = 0.0
+      cfdpv(:) = 0.0
 
       do mgs = 1,ngscnt
       qisbv(mgs) = 0.0
@@ -11237,6 +11239,7 @@
       cidpv(mgs) =  0.0 ! (cx(mgs,li)/(qx(mgs,li)+1.e-20))*qidpv(mgs)
       cisdpv(mgs) = 0.0
       chdpv(mgs)  = 0.0 ! (cx(mgs,lh)/(qx(mgs,lh)+1.e-20))*qhdpv(mgs)
+      cfdpv(mgs)  = 0.0
       chldpv(mgs) = 0.0
       end do
       end if
