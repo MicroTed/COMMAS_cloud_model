@@ -3732,7 +3732,6 @@
         kzst = kzst0
       ENDIF
       
-#ifdef USE_SLM
       IF ( ilight == 1 .or. ilight == 2 ) THEN
       call mudlight                                 &
      &  (time_real,time,nstep,iliter,lgtstp,numlgt,loccur     &
@@ -3753,9 +3752,6 @@
      &   nxslm,nyslm,nzslm,  &  ! nb2,nxb2,nyb2,nzbt2,nzb2,      
      &   iunit, bcx, bcy, db) 
       ELSEIF ( ilight == 3 ) THEN
-#else
-      IF ( ilight == 1 .or. ilight == 2 .or. ilight == 3) THEN
-#endif
        call mszlight                                 &
      &  (time_real,time,nstep,iliter,lgtstp,numlgt,loccur     &
      &  ,nor,nx,ny,nz                                &

@@ -165,11 +165,11 @@ ELEC_OBJS = \
            mudcom.o              \
            mud2sp.o              \
            mud3sp.o              \
+           mudlight.o            \
            mszlight.o            \
+           spark.ion.2.6.o       \
+           spark.ion.2.6.mpi.o   \
            strzsor.o             
-#            mudlight.o            \
-#           spark.ion.2.6.o       \
-#           spark.ion.2.6.mpi.o   \
 
 IOTEST_OBJS = \
            file_module.o         \
@@ -184,7 +184,8 @@ IOTEST_OBJS = \
 ifeq ($(ELECON), 1)
 MODEL_OBJS = $(LIB_OBJS) $(MIC_OBJS) $(ELEC_OBJS) 
 else
-MODEL_OBJS = $(LIB_OBJS) $(MIC_OBJS) 
+MODEL_OBJS = $(LIB_OBJS) $(MIC_OBJS)
+ELECON = 0
 endif
 
 $(info    ELECON is $(ELECON))
@@ -367,7 +368,7 @@ global_module.o:            $(SRC)/global_module.f90
 	$(FPP) $(FREE) $(INCLUDE) $(OPT_F90) -c $(SRC)/$*.f90
 
 dualpara.o:            $(SRC)/dualpara.F90 global_module.o
-	$(FPP) $(FREE) $(INCLUDE) $(OPT_F90) -DCOMMAS -c $(SRC)/$*.F90
+	$(FPP) $(FREE) $(INCLUDE) $(OPT_F90) $(FPPDEF)-DCOMMAS -c $(SRC)/$*.F90
 
 raymond_lowpass.o:             $(SRC)/raymond_lowpass.f
 	$(FPP) $(FIXED) $(INCLUDE) $(OPT_F77) -c $(SRC)/$*.f
@@ -430,7 +431,7 @@ hcmdriver.o:    $(SRC)/micro_driver.F90 index_module.o file_module.o vis5d_modul
 
 takdriver.o:    $(SRC)/micro_driver.F90 index_module.o file_module.o vis5d_module.o \
                       grid_module.o micro_module.o cputime_module.o elec_module.o commasmpi_module.o  elec_driver.o
-	$(FPP) $(OPT_F90) $(FREE) $(INCLUDE) -o $*.o $(DFLAGS) $(FPPDEF)-DTAKON  $(FPPDEF)-DCHGELEC=0 -c $(SRC)/micro_driver.F90
+	$(FPP) $(OPT_F90) $(FREE) $(INCLUDE) -o $*.o $(DFLAGS) $(FPPDEF)-DTAKON  $(FPPDEF)-DCHGELEC=$(ELECON) -c $(SRC)/micro_driver.F90
 
 takinterface.o: $(SRCTAK)/takinterface.F90 tak_modules.o index_module.o micro_module.o grid_module.o elec_module.o \
                       commasmpi_module.o cputime_module.o traj_module.o
@@ -507,7 +508,8 @@ ionstep.o:            $(SRC)/ionstep.F90 grid_module.o index_module.o elec_modul
                       cputime_module.o micro_module.o
 	$(FPP) $(FREE) $(SMP) $(DFLAGS) $(OPT_F90) $(INCLUDE) -c $(SRC)/$*.F90
 
-ionsteptak.o:         $(SRC)/ionstep.F90 grid_module.o index_module.o elec_module.o commasmpi_module.o cputime_module.o
+ionsteptak.o:         $(SRC)/ionstep.F90 grid_module.o index_module.o elec_module.o commasmpi_module.o \
+                        cputime_module.o micro_module.o
 	$(FPP) $(FREE) $(SMP) $(DFLAGS)  $(FPPDEF)-DTAKON $(OPT_F77) $(INCLUDE)  -o $*.o -c $(SRC)/ionstep.F90
 
 ionatt.o:             $(SRC)/ionatt.F index_module.o micro_module.o commasmpi_module.o
@@ -573,7 +575,7 @@ print.o:              $(SRC)/print.F90 grid_module.o file_module.o param_module.
                       commasmpi_module.o
 	$(FPP) $(FREE) $(DFLAGS) $(OPT_F90) $(INCLUDE) -c $(SRC)/$*.F90
 
-radardbz.o:           $(SRC)/radardbz.F90 index_module.o commasmpi_module.o micro_module.o
+radardbz.o:           $(SRC)/radardbz.F90 index_module.o commasmpi_module.o micro_module.o namelist_module.o
 	$(FPP) $(FREE) $(SMP) $(DFLAGS) $(OPT_F90) $(INCLUDE) -c $(SRC)/$*.F90
 
 rimdens.o:            $(SRC)/rimdens.F
@@ -582,7 +584,7 @@ rimdens.o:            $(SRC)/rimdens.F
 micro_driver.o: $(SRC)/micro_driver.F90 $(SRC)/include/sam.def.h \
                       vis5d_module.o file_module.o grid_module.o micro_module.o \
                       index_module.o cputime_module.o elec_module.o commasmpi_module.o elec_driver.o
-	$(FPP) $(FREE) $(SMP) $(DFLAGS) $(OPT_F90) $(INCLUDE) -c $(SRC)/$*.F90
+	$(FPP) $(FREE) $(SMP) $(DFLAGS) $(FPPDEF)-DCHGELEC=$(ELECON) $(OPT_F90) $(INCLUDE) -c $(SRC)/$*.F90
 
 micro_MY_driver.o: $(SRC)/micro_MY_driver.F90 file_module.o grid_module.o micro_module.o \
                          index_module.o cputime_module.o my3mom_fncs_mod.o my2mom_fncs_mod.o \
@@ -601,7 +603,7 @@ my3mom_sedi_mod.o: $(SRC)/my3mom_sedi_mod.F90 my2mom_fncs_mod.o
 my3mom_main_mod.o: $(SRC)/my3mom_main_mod.F90 my3mom_sedi_mod.o
 	$(FPP) $(FREE) $(SMP) $(DFLAGS) $(OPT_F90) $(INCLUDE) -c $(SRC)/$*.F90
 
-ddfallnx.o:   $(SRC)/ddfallnx.F $(SRC)/include/sam.def.h index_module.o
+ddfallnx.o:   $(SRC)/ddfallnx.F $(SRC)/include/sam.def.h index_module.o commasmpi_module.o
 	$(FPP) $(FIXED) $(SMP) $(DFLAGS) $(OPT_F77) $(INCLUDE) -c $(SRC)/$*.F
 
 ice10_setvt.o:          $(SRC)/ice10_setvt.F index_module.o commasmpi_module.o
@@ -626,7 +628,7 @@ saund.02b.o:          $(SRC)/saund.02b.F90
 	$(FPP) $(FREE) $(SMP) $(DFLAGS) $(OPT_F90) $(INCLUDE) -c $(SRC)/$*.F90
 
 setvt_zvd.o:      $(SRC)/setvt_zvd.F90 index_module.o micro_module.o
-	$(FPP) $(FREE) $(SMP) $(DFLAGS) $(OPT_F90) $(IPO) $(INCLUDE) -c $(SRC)/$*.F90
+	$(FPP) $(FREE) $(SMP) $(DFLAGS) $(FPPDEF)-DCOMMAS $(OPT_F90) $(IPO) $(INCLUDE) -c $(SRC)/$*.F90
 
 sfcphy.o:  $(SRC)/sfcphy.F90 param_module.o grid_module.o
 	$(FPP) $(FREE) $(DFLAGS) $(OPT_F90)  $(INCLUDE) -c $(SRC)/$*.F90
@@ -684,7 +686,7 @@ traj_module.o:       $(SRC)/traj_module.F90 param_module.o commasmpi_module.o ta
                      micro_module.o initsubs.o
 	$(FPP) $(FREE) $(DFLAGS) $(OPT_F90) $(INCLUDE) -c $(SRC)/$*.F90
 
-util.o:               $(SRC)/util.F90
+util.o:               $(SRC)/util.F90 commasmpi_module.o
 	$(FPP) $(FREE) $(SMP) $(DFLAGS) $(OPT_F90) $(INCLUDE) -c $(SRC)/$*.F90
 
 v5dp.o:               $(SRC)/v5dp.c  $(SRC)/include/v5d.h $(SRC)/include/binio.h $(SRC)/include/vis5d.h
@@ -715,11 +717,11 @@ module_mp_thompson.o:  $(SRC)/module_mp_thompson.F module_mp_radar.o
 	$(FPP) $(FREE) $(OPT_F90) $(DFLAGS) -DCOMMAS $(IPO) $(INCLUDE) -c $(SRC)/$*.F
 #	$(FPP) $(FREE) -O0 -g -C $(DFLAGS) -DCM1 -DCOMMAS $(IPO) $(INCLUDE) -c $(SRC)/$*.F
 
-module_mp_thompson381wof.o:  $(SRC)/module_mp_thompson381wof.F module_mp_radar.o
+module_mp_thompson381wof.o:  $(SRC)/module_mp_thompson381wof.F module_mp_radar.o commasmpi_module.o
 	$(FPP) $(FREE) $(OPT_F90) $(DFLAGS) -DCM1 -DCOMMAS $(IPO) $(INCLUDE) -c $(SRC)/$*.F
 #	$(FPP) $(FREE) -O0 -g -C $(DFLAGS) -DCM1 -DCOMMAS $(IPO) $(INCLUDE) -c $(SRC)/$*.F
 
-module_mp_thompson411.o:  $(SRC)/module_mp_thompson411.F module_mp_radar.o
+module_mp_thompson411.o:  $(SRC)/module_mp_thompson411.F module_mp_radar.o commasmpi_module.o
 	$(FPP) $(FREE) $(OPT_F90) $(DFLAGS) -DCM1 -DCOMMAS $(IPO) $(INCLUDE) -c $(SRC)/$*.F
 #	$(FPP) $(FREE) -O0 -g -C $(DFLAGS) -DCM1 -DCOMMAS $(IPO) $(INCLUDE) -c $(SRC)/$*.F
 
@@ -745,7 +747,7 @@ wenofall.o:           $(SRC)/wenofall.F
 zieg3.driver.o:       $(SRC)/micro_driver.F90 index_module.o file_module.o vis5d_module.o \
                       grid_module.o micro_module.o cputime_module.o elec_module.o \
                       commasmpi_module.o elec_driver.o
-	$(FPP) $(OPT_F90) $(FREE) $(INCLUDE) -o $*.o $(DFLAGS) $(FPPDEF)-DICE3 -c $(SRC)/micro_driver.F90
+	$(FPP) $(OPT_F90) $(FREE) $(INCLUDE) -o $*.o $(DFLAGS) $(FPPDEF)-DCHGELEC=$(ELECON) $(FPPDEF)-DICE3 -c $(SRC)/micro_driver.F90
 
 lfo3.driver.o:       $(SRC)/micro_driver.F90 index_module.o file_module.o vis5d_module.o \
                       grid_module.o micro_module.o cputime_module.o elec_module.o \

@@ -8,6 +8,7 @@
 #else
 
 #include "sam.def.h"
+! set chgelec with compile option
 ! #define CHGELEC
 
 #endif
@@ -1015,6 +1016,7 @@
         
 #ifdef CHGELEC
       CALL ELEC_STUFF_INIT(nzend)
+      write(91,*) 'call ELEC_STUFF_INIT, ipelec = ',ipelec
       IF ( ipelec .ge. 1 ) THEN ! {
 
       CALL cld_cpu('MICROPHYSICS')
